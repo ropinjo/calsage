@@ -1,0 +1,58 @@
+# Gradle / Kotlin build outputs
+.gradle/
+.kotlin/
+build/
+*/build/
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Local machine configuration
+local.properties
+.DS_Store
+Thumbs.db
+
+# Assistant/local planning files
+.agents/
+.claude/
+.codex
+.playwright-mcp/
+calsage-plan.md
+
+# Android build artifacts and captures
+captures/
+output-metadata.json
+
+# Signing files and secrets
+*.jks
+*.keystore
+*.pem
+*.p12
+*.key
+*.env
+*.env.*
+keystore.properties
+
+# Logs
+*.log
+
+# Generated APK / bundle exports kept outside module build folders
+apk/
+*.apk
+*.ap_
+*.aab
+
+# Native / profiling outputs
+*.hprof
+*.prof
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# Kotlin/Java compiled bytecode outside build directories
+*.class
