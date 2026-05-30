@@ -23,8 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,8 +35,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -46,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
@@ -69,24 +68,22 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -96,7 +93,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -113,14 +109,15 @@ import com.calorietracker.presentation.common.components.PrimaryButton
 import com.calorietracker.presentation.common.components.SecondaryButton
 import com.calorietracker.presentation.theme.ThemePreference
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlinx.coroutines.launch
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 private const val VENICE_MODELS_URL = "https://docs.venice.ai/models/text"
 private val MODEL_ADDED_DATE_FORMATTER = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.getDefault())
@@ -881,7 +878,7 @@ private fun ModelSelectionSection(
                 }
 
                 if (showModelPicker) {
-                    AiModelPickerSheet(
+                    AiModelPickerDialog(
                         availableModels = availableModels,
                         selectedModelId = selectedModel.id,
                         onDismissRequest = { showModelPicker = false },
@@ -906,21 +903,17 @@ private fun ModelSelectionSection(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AiModelPickerSheet(
+private fun AiModelPickerDialog(
     availableModels: List<AiModel>,
     selectedModelId: String,
     onDismissRequest: () -> Unit,
     onModelSelected: (String) -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val coroutineScope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val density = LocalDensity.current
-    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
-    var wasKeyboardVisible by remember { mutableStateOf(false) }
+    val configuration = LocalConfiguration.current
+    val maxDialogHeight = (configuration.screenHeightDp * 0.9f).dp
     var searchFocused by remember { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     val listState = rememberLazyListState()
@@ -945,13 +938,15 @@ private fun AiModelPickerSheet(
         label = "AI model search border"
     )
 
-    LaunchedEffect(isKeyboardVisible) {
-        if (wasKeyboardVisible && !isKeyboardVisible) {
+    // Dismiss the keyboard as soon as the user starts scrolling the list.
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            keyboardController?.hide()
             focusManager.clearFocus()
         }
-        wasKeyboardVisible = isKeyboardVisible
     }
 
+    // Reveal the currently selected model when the dialog opens.
     LaunchedEffect(Unit) {
         val index = availableModels.indexOfFirst { it.id == selectedModelId }
         if (index > 0) {
@@ -959,124 +954,162 @@ private fun AiModelPickerSheet(
         }
     }
 
-    ModalBottomSheet(
+    Dialog(
         onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-        modifier = Modifier.navigationBarsPadding(),
-        containerColor = MaterialTheme.colorScheme.surface,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Column(
-            modifier = Modifier.pointerInput(Unit) {
-                awaitEachGesture {
-                    awaitFirstDown(pass = PointerEventPass.Initial)
-                    focusManager.clearFocus()
-                }
-            }
+        // Full-window scrim: a tap anywhere outside the card dismisses the dialog.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = onDismissRequest
+                )
+                // Inset the card for system bars, display cutout and the keyboard,
+                // while the scrim's click area (declared above) still covers the full screen.
+                .safeDrawingPadding(),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "AI model",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)
-            )
-            BasicTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 6.dp)
-                    .height(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .border(
-                        BorderStroke(1.dp, searchBorderColor),
-                        RoundedCornerShape(12.dp)
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .heightIn(max = maxDialogHeight)
+                    // Swallow taps on the card so they don't reach the scrim and close it.
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
                     )
-                    .onFocusChanged { searchFocused = it.isFocused },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodyLarge.copy(
-                    color = MaterialTheme.colorScheme.onSurface
-                ),
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                    }
-                ),
-                decorationBox = { innerTextField ->
+            ) {
+                Column(modifier = Modifier.padding(vertical = 18.dp)) {
                     Row(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
+                        Text(
+                            text = "AI model",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = "Search - GLM & Kimi recommended",
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                            innerTextField()
+                        IconButton(onClick = onDismissRequest) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Close model list",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                }
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 560.dp),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                if (filteredModels.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No matching models",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
-                        )
-                    }
-                } else {
-                    itemsIndexed(
-                        items = filteredModels,
-                        key = { _, model -> model.id }
-                    ) { index, model ->
-                        AiModelPickerRow(
-                            model = model,
-                            selected = model.id == selectedModelId,
-                            onClick = {
-                                coroutineScope.launch {
-                                    sheetState.hide()
-                                    onModelSelected(model.id)
-                                    onDismissRequest()
+                    BasicTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 6.dp)
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .border(
+                                BorderStroke(1.dp, searchBorderColor),
+                                RoundedCornerShape(12.dp)
+                            )
+                            .onFocusChanged { searchFocused = it.isFocused },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = MaterialTheme.colorScheme.onSurface
+                        ),
+                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            }
+                        ),
+                        decorationBox = { innerTextField ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Box(
+                                    modifier = Modifier.weight(1f),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (searchQuery.isEmpty()) {
+                                        Text(
+                                            text = "Search - GLM & Kimi recommended",
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                    innerTextField()
                                 }
                             }
-                        )
-                        if (index < filteredModels.lastIndex) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 24.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
-                            )
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f)
+                    )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        if (filteredModels.isEmpty()) {
+                            item {
+                                Text(
+                                    text = "No matching models",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 18.dp)
+                                )
+                            }
+                        } else {
+                            itemsIndexed(
+                                items = filteredModels,
+                                key = { _, model -> model.id }
+                            ) { index, model ->
+                                AiModelPickerRow(
+                                    model = model,
+                                    selected = model.id == selectedModelId,
+                                    onClick = {
+                                        onModelSelected(model.id)
+                                        onDismissRequest()
+                                    }
+                                )
+                                if (index < filteredModels.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 24.dp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
