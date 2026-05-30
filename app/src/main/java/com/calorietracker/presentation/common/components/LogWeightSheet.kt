@@ -1,14 +1,14 @@
 package com.calorietracker.presentation.common.components
 
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,22 +17,24 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,7 +55,10 @@ fun LogWeightSheet(
     val weightFocusRequester = remember { FocusRequester() }
     val canSubmit = weightInput.replace(',', '.').toFloatOrNull() != null
 
-    LaunchedEffect(Unit) {
+    // Wait until the sheet has settled before requesting focus, so the keyboard
+    // rises after the enter animation finishes instead of fighting it.
+    LaunchedEffect(sheetState) {
+        snapshotFlow { sheetState.currentValue }.first { it == SheetValue.Expanded }
         runCatching { weightFocusRequester.requestFocus() }
     }
 
@@ -62,17 +67,10 @@ fun LogWeightSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        contentWindowInsets = { WindowInsets.ime }
+        contentWindowInsets = { WindowInsets.navigationBars.union(WindowInsets.ime) }
     ) {
         Column(
-            modifier = Modifier
-                .padding(bottom = 24.dp)
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown()
-                        focusManager.clearFocus()
-                    }
-                }
+            modifier = Modifier.padding(bottom = 24.dp)
         ) {
             Text(
                 text = "Log Weight",
