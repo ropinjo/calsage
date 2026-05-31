@@ -1016,8 +1016,8 @@ private fun AiModelPickerDialog(
                         onValueChange = { searchQuery = it },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 20.dp, vertical = 6.dp)
-                            .height(52.dp)
+                            .padding(horizontal = 20.dp, vertical = 4.dp)
+                            .height(44.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant)
                             .border(
@@ -1026,7 +1026,7 @@ private fun AiModelPickerDialog(
                             )
                             .onFocusChanged { searchFocused = it.isFocused },
                         singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
                             color = MaterialTheme.colorScheme.onSurface
                         ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
@@ -1041,15 +1041,15 @@ private fun AiModelPickerDialog(
                             Row(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 16.dp),
+                                    .padding(horizontal = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Filled.Search,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                                 Box(
                                     modifier = Modifier.weight(1f),
@@ -1057,8 +1057,8 @@ private fun AiModelPickerDialog(
                                 ) {
                                     if (searchQuery.isEmpty()) {
                                         Text(
-                                            text = "Search - GLM & Kimi recommended",
-                                            style = MaterialTheme.typography.bodyLarge,
+                                            text = "GLM & Kimi recommended",
+                                            style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
@@ -1069,10 +1069,6 @@ private fun AiModelPickerDialog(
                                 }
                             }
                         }
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f)
                     )
                     LazyColumn(
                         state = listState,
@@ -1106,7 +1102,7 @@ private fun AiModelPickerDialog(
                                 if (index < filteredModels.lastIndex) {
                                     HorizontalDivider(
                                         modifier = Modifier.padding(horizontal = 24.dp),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                     )
                                 }
                             }
