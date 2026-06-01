@@ -7,6 +7,7 @@ import com.calorietracker.domain.model.MealType
 import com.calorietracker.domain.repository.FoodRepository
 import com.calorietracker.domain.repository.GoalsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -18,6 +19,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
@@ -56,14 +58,14 @@ class DashboardViewModel @Inject constructor(
 
             DashboardUiState.Success(
                 selectedDate = date,
-                caloriesConsumed = dailyTotal?.calories ?: 0,
-                calorieTarget = goals?.calorieTarget ?: 2000,
-                proteinConsumed = dailyTotal?.proteinGrams ?: 0f,
-                proteinTarget = goals?.proteinTargetGrams ?: 150f,
-                carbsConsumed = dailyTotal?.carbsGrams ?: 0f,
-                carbsTarget = goals?.carbsTargetGrams ?: 250f,
-                fatConsumed = dailyTotal?.fatGrams ?: 0f,
-                fatTarget = goals?.fatTargetGrams ?: 65f,
+                caloriesConsumed = dailyTotal.calories,
+                calorieTarget = goals.calorieTarget,
+                proteinConsumed = dailyTotal.proteinGrams,
+                proteinTarget = goals.proteinTargetGrams,
+                carbsConsumed = dailyTotal.carbsGrams,
+                carbsTarget = goals.carbsTargetGrams,
+                fatConsumed = dailyTotal.fatGrams,
+                fatTarget = goals.fatTargetGrams,
                 mealSummaries = mealSummaries
             )
         }
@@ -77,6 +79,10 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferences.setSelectedDate(date)
         }
+    }
+
+    fun selectToday() {
+        selectDate(today)
     }
 
     fun navigateDay(offset: Int) {

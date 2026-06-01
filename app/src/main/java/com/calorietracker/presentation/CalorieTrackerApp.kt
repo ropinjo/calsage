@@ -208,7 +208,7 @@ fun CalorieTrackerApp(
                                 backStack.add(SettingsDestination)
                             },
                             onNavigateToFavorites = { mealType ->
-                                backStack.add(FavoritesDestination(mealType = mealType))
+                                backStack.add(FavoritesDestination(mealType = mealType, date = destination.date))
                             }
                         )
                     }
@@ -227,6 +227,7 @@ fun CalorieTrackerApp(
                     is FavoritesDestination -> {
                         FavoritesScreen(
                             mealType = destination.mealType,
+                            date = destination.date,
                             onNavigateBack = { backStack.removeLastOrNull() },
                             onEditFavorite = { favoriteId, date ->
                                 backStack.add(
@@ -259,7 +260,11 @@ private val appBackStackSaver: Saver<androidx.compose.runtime.snapshots.Snapshot
         Json.encodeToString(ListSerializer(AppDestination.serializer()), backStack.toList())
     },
     restore = { serialized ->
-        Json.decodeFromString(ListSerializer(AppDestination.serializer()), serialized)
+        runCatching {
+            Json.decodeFromString(ListSerializer(AppDestination.serializer()), serialized)
+        }.getOrElse {
+            listOf(DashboardDestination)
+        }
             .let { restored -> mutableStateListOf(*restored.toTypedArray()) }
     }
 )

@@ -38,6 +38,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,14 +54,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.calorietracker.presentation.common.components.AddFab
 import com.calorietracker.presentation.common.components.CalorieRing
 import com.calorietracker.presentation.common.components.MacroProgressBar
 import com.calorietracker.presentation.common.components.MealCard
 import com.calorietracker.presentation.common.components.MealTypePickerSheet
+import kotlinx.coroutines.delay
+import java.time.Duration
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
@@ -75,6 +83,28 @@ fun DashboardScreen(
     val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     var showMealPicker by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START) {
+                viewModel.selectToday()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        while (true) {
+            val now = ZonedDateTime.now()
+            val nextDay = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+            delay(Duration.between(now, nextDay).toMillis().coerceAtLeast(1L))
+            viewModel.selectToday()
+        }
+    }
 
     Scaffold(
         topBar = {

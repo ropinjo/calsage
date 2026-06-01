@@ -74,18 +74,18 @@ import com.calorietracker.presentation.common.isToday
 @Composable
 fun FavoritesScreen(
     mealType: String,
+    date: String,
     onNavigateBack: () -> Unit,
     onEditFavorite: (favoriteId: Long, date: String) -> Unit = { _, _ -> },
     viewModel: FavoritesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val selectedDate by viewModel.selectedDate.collectAsStateWithLifecycle()
     var deleteTarget by remember { mutableStateOf<FavoriteMeal?>(null) }
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val showPastDateBanner = !isToday(selectedDate)
+    val showPastDateBanner = !isToday(date)
 
     val mealLabel = mealType.lowercase().replaceFirstChar { it.uppercase() }
 
@@ -144,7 +144,7 @@ fun FavoritesScreen(
                 }
         ) {
             if (showPastDateBanner) {
-                PastDateBanner(label = formatPastDateLabel(selectedDate))
+                PastDateBanner(label = formatPastDateLabel(date))
             }
 
             if (uiState.favorites.size >= 5 || searchQuery.isNotBlank()) {
@@ -216,8 +216,8 @@ fun FavoritesScreen(
                     items(uiState.favorites, key = { it.id }) { favorite ->
                         FavoriteCard(
                             favorite = favorite,
-                            onQuickLog = { viewModel.quickLog(favorite) },
-                            onEdit = { onEditFavorite(favorite.id, selectedDate) },
+                            onQuickLog = { viewModel.quickLog(favorite, date) },
+                            onEdit = { onEditFavorite(favorite.id, date) },
                             onDelete = { deleteTarget = favorite }
                         )
                     }

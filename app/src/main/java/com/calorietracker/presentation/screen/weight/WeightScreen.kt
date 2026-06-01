@@ -331,7 +331,7 @@ private fun ChangeStatCard(label: String, change: Float?, unit: String, modifier
                     Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        "%+.1f %s".format(if (unit == "lb") change * 2.20462f else change, unit),
+                        "%+.2f %s".format(if (unit == "lb") change * 2.20462f else change, unit),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = color
                     )
@@ -383,9 +383,9 @@ private fun WeightEntryRow(entry: WeightEntry, unit: String, onDelete: () -> Uni
 
 private fun formatWeight(weightKg: Float, unit: String): String {
     return if (unit == "lb") {
-        "%.1f lb".format(weightKg * 2.20462f)
+        "%.2f lb".format(weightKg * 2.20462f)
     } else {
-        "%.1f kg".format(weightKg)
+        "%.2f kg".format(weightKg)
     }
 }
 

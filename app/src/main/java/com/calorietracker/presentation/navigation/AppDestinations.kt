@@ -30,7 +30,7 @@ data class AddFoodDestination(
 data class MealDetailDestination(val mealType: String, val date: String) : AppDestination
 
 @Serializable
-data class FavoritesDestination(val mealType: String) : AppDestination
+data class FavoritesDestination(val mealType: String, val date: String) : AppDestination
 
 @Serializable
 data object OnboardingDestination : AppDestination

@@ -3,7 +3,6 @@ package com.calorietracker.presentation.screen.favorites
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.calorietracker.data.local.preferences.UserPreferencesDataStore
 import com.calorietracker.domain.model.FavoriteMeal
 import com.calorietracker.domain.model.FoodEntry
 import com.calorietracker.domain.model.MealType
@@ -11,6 +10,7 @@ import com.calorietracker.domain.model.NutritionInfo
 import com.calorietracker.domain.repository.FavoriteRepository
 import com.calorietracker.domain.repository.FoodRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,14 +19,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 data class FavoritesUiState(
@@ -35,11 +32,11 @@ data class FavoritesUiState(
     val isLoading: Boolean = true
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class FavoritesViewModel @Inject constructor(
     private val favoriteRepository: FavoriteRepository,
     private val foodRepository: FoodRepository,
-    private val userPreferences: UserPreferencesDataStore,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -47,17 +44,6 @@ class FavoritesViewModel @Inject constructor(
         savedStateHandle.get<String>("mealType")?.uppercase()
             ?.let { runCatching { MealType.valueOf(it) }.getOrNull() }
     )
-
-    private val today: String
-        get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-
-    val selectedDate: StateFlow<String> = userPreferences.selectedDate
-        .map { it ?: today }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = today
-        )
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -98,10 +84,9 @@ class FavoritesViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
-    fun quickLog(favorite: FavoriteMeal) {
+    fun quickLog(favorite: FavoriteMeal, date: String) {
         val mealType = mealTypeFlow.value ?: return
         viewModelScope.launch {
-            val date = userPreferences.selectedDate.first() ?: today
             val timestamp = System.currentTimeMillis()
 
             if (favorite.items.isNotEmpty()) {

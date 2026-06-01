@@ -619,7 +619,7 @@ private fun formatMacroAxisLabel(value: Float): String {
 
 private fun formatSummaryWeight(weightKg: Float, unit: String, includeSign: Boolean): String {
     val displayValue = if (unit == "lb") weightKg * 2.20462f else weightKg
-    val formattedValue = if (includeSign) "%+.1f".format(displayValue) else "%.1f".format(displayValue)
+    val formattedValue = if (includeSign) "%+.2f".format(displayValue) else "%.2f".format(displayValue)
     return "$formattedValue $unit"
 }
 
