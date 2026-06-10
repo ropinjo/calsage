@@ -18,6 +18,7 @@ import com.calorietracker.domain.repository.BarcodeLookupResult
 import com.calorietracker.domain.repository.BarcodeRepository
 import com.calorietracker.domain.repository.FavoriteRepository
 import com.calorietracker.domain.repository.FoodRepository
+import com.calorietracker.presentation.common.capitalizedFoodName
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -704,11 +705,15 @@ private fun AddFoodUiState.Result.defaultFavoriteName(): String {
 }
 
 private fun FoodItemResult.loggedDescription(): String {
-    val loggedAmount = amount.trim()
+    val isAssumed = amount.contains("assumed", ignoreCase = true)
+    val loggedAmount = amount
+        .replace(Regex("""\s*\(?\s*assumed\s*\)?\s*""", RegexOption.IGNORE_CASE), " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
     val loggedName = name.trim()
     val correctedDescription = loggedAmount.correctedWith(loggedName)
 
-    return when {
+    val description = when {
         loggedAmount.isEmpty() -> loggedName
         loggedName.isEmpty() -> loggedAmount
         loggedAmount.equals(loggedName, ignoreCase = true) -> loggedName
@@ -716,7 +721,9 @@ private fun FoodItemResult.loggedDescription(): String {
         loggedName.startsWith(loggedAmount, ignoreCase = true) -> loggedName
         correctedDescription != null -> correctedDescription
         else -> "$loggedAmount $loggedName"
-    }.capitalizedFoodName()
+    }
+
+    return (if (isAssumed) "$description (assumed)" else description).capitalizedFoodName()
 }
 
 private fun String.correctedWith(name: String): String? {
@@ -740,18 +747,6 @@ private fun String.isNearMatch(other: String): Boolean {
 
 private fun String.lettersOnly(): String {
     return filter { it.isLetter() }.lowercase()
-}
-
-private fun String.capitalizedFoodName(): String {
-    val trimmed = trim()
-    val match = Regex("""^(\d+(?:[.,]\d+)?\s*[a-zA-Z%]*\s+)(\p{L})(.*)$""").matchEntire(trimmed)
-    if (match != null) {
-        return match.groupValues[1] + match.groupValues[2].uppercase() + match.groupValues[3]
-    }
-
-    val firstLetter = trimmed.indexOfFirst { it.isLetter() }
-    if (firstLetter == -1) return trimmed
-    return trimmed.replaceRange(firstLetter, firstLetter + 1, trimmed[firstLetter].titlecase())
 }
 
 private fun levenshteinDistance(left: String, right: String): Int {

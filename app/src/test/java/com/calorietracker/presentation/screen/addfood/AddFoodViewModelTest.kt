@@ -289,6 +289,40 @@ class AddFoodViewModelTest {
     }
 
     @Test
+    fun `log food places assumed marker at end when amount and name are separate`() = runTest {
+        val foodRepository = FakeFoodRepository()
+        val viewModel = createViewModel(
+            aiRepository = FakeAiRepository(
+                result = NutritionInfo(
+                    calories = 156,
+                    proteinGrams = 12f,
+                    carbsGrams = 1f,
+                    fatGrams = 10f,
+                    items = listOf(
+                        NutritionItem(
+                            name = "eggs",
+                            amount = "2 (assumed)",
+                            calories = 156,
+                            proteinGrams = 12f,
+                            carbsGrams = 1f,
+                            fatGrams = 10f
+                        )
+                    )
+                )
+            ),
+            foodRepository = foodRepository
+        )
+
+        viewModel.updateDescription(TextFieldValue("eggs"))
+        viewModel.analyzeFood()
+        advanceUntilIdle()
+        viewModel.logFood()
+        advanceUntilIdle()
+
+        assertEquals("2 Eggs (assumed)", foodRepository.insertedEntries.single().description)
+    }
+
+    @Test
     fun `save as favorite defaults to capitalized item summary name`() = runTest {
         val favoriteRepository = FakeFavoriteRepository()
         val viewModel = createViewModel(

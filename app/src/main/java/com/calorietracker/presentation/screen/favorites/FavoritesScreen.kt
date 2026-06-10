@@ -65,10 +65,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.calorietracker.domain.model.FavoriteMeal
 import com.calorietracker.domain.model.FoodSource
 import com.calorietracker.domain.model.NutritionItem
+import com.calorietracker.presentation.common.capitalizedFoodName
+import com.calorietracker.presentation.common.cleanAssumedAmount
 import com.calorietracker.presentation.common.components.NutritionChip
 import com.calorietracker.presentation.common.components.ScannedChip
 import com.calorietracker.presentation.common.formatPastDateLabel
 import com.calorietracker.presentation.common.isToday
+import com.calorietracker.presentation.common.removeFoodName
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -412,9 +415,9 @@ private fun FavoriteMeal.favoriteDisplayName(): String {
     val cleanName = name.trim()
     val looksLikeItemList = cleanName.contains('\n') || cleanName.startsWith("-")
     if (items.isNotEmpty() && looksLikeItemList) {
-        return items.favoriteSummaryName().ifBlank { cleanName.capitalizedFavoriteText() }
+        return items.favoriteSummaryName().ifBlank { cleanName.capitalizedFoodName() }
     }
-    return cleanName.capitalizedFavoriteText()
+    return cleanName.capitalizedFoodName()
 }
 
 private fun List<NutritionItem>.favoriteSummaryName(): String {
@@ -424,11 +427,11 @@ private fun List<NutritionItem>.favoriteSummaryName(): String {
         itemNames.size == 1 -> itemNames.first()
         itemNames.size <= 3 -> itemNames.joinToString(", ")
         else -> "${itemNames.take(2).joinToString(", ")} + ${itemNames.size - 2}"
-    }.capitalizedFavoriteText()
+    }.capitalizedFoodName()
 }
 
 private fun NutritionItem.favoriteDisplayLabel(): String {
-    val itemName = name.trim().capitalizedFavoriteText()
+    val itemName = name.trim().capitalizedFoodName()
     val cleanAmount = amount.cleanAssumedAmount()
     if (cleanAmount.isBlank()) return itemName
 
@@ -436,33 +439,8 @@ private fun NutritionItem.favoriteDisplayLabel(): String {
     return when {
         amountWithoutName.isBlank() -> itemName
         cleanAmount.equals(name, ignoreCase = true) -> itemName
-        cleanAmount.contains(name, ignoreCase = true) -> cleanAmount.capitalizedFavoriteText()
+        cleanAmount.contains(name, ignoreCase = true) -> cleanAmount.capitalizedFoodName()
         name.contains(cleanAmount, ignoreCase = true) -> itemName
         else -> "$itemName - $amountWithoutName"
     }
-}
-
-private fun String.cleanAssumedAmount(): String {
-    if (contains("assumed", ignoreCase = true)) return ""
-    return replace(Regex("""\s*\(?assumed\)?\s*""", RegexOption.IGNORE_CASE), " ")
-        .replace(Regex("""\s+"""), " ")
-        .trim()
-}
-
-private fun String.removeFoodName(name: String): String {
-    return replace(Regex("""\b${Regex.escape(name.trim())}\b""", RegexOption.IGNORE_CASE), "")
-        .replace(Regex("""\s+"""), " ")
-        .trim()
-}
-
-private fun String.capitalizedFavoriteText(): String {
-    val trimmed = trim()
-    val match = Regex("""^(\d+(?:[.,]\d+)?\s*[a-zA-Z%]*\s+)(\p{L})(.*)$""").matchEntire(trimmed)
-    if (match != null) {
-        return match.groupValues[1] + match.groupValues[2].uppercase() + match.groupValues[3]
-    }
-
-    val firstLetter = trimmed.indexOfFirst { it.isLetter() }
-    if (firstLetter == -1) return trimmed
-    return trimmed.replaceRange(firstLetter, firstLetter + 1, trimmed[firstLetter].titlecase())
 }

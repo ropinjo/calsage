@@ -109,6 +109,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.calorietracker.domain.model.FoodSource
 import com.calorietracker.domain.model.mealTypeExamplePlaceholder
+import com.calorietracker.presentation.common.capitalizedFoodName
+import com.calorietracker.presentation.common.displayAmountFor
 import com.calorietracker.presentation.common.formatPastDateLabel
 import com.calorietracker.presentation.common.isToday
 import com.calorietracker.presentation.common.components.NutritionChip
@@ -829,7 +831,7 @@ private fun FoodItemCard(
     item: FoodItemResult,
     onEdit: () -> Unit
 ) {
-    val displayAmount = item.amount.displayAmount()
+    val displayAmount = displayAmountFor(item.name, item.amount)
 
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -844,7 +846,7 @@ private fun FoodItemCard(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = item.name,
+                        text = item.name.capitalizedFoodName(),
                         style = MaterialTheme.typography.titleSmall.copy(
                             fontWeight = FontWeight.SemiBold
                         ),
@@ -1052,11 +1054,6 @@ private val AddFoodUiState.contentType: String
         is AddFoodUiState.ManualEntry -> "ManualEntry"
         is AddFoodUiState.Error -> "Error"
     }
-
-private fun String.displayAmount(): String {
-    if (contains("assumed", ignoreCase = true)) return ""
-    return trim()
-}
 
 private fun FoodItemResult.updatedWith(
     name: String,

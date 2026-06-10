@@ -25,20 +25,24 @@ object NutritionPromptBuilder {
         "- Each item in \"items\" must have: name, amount, calories, protein_g, carbs_g, fat_g.\n" +
         "- The top-level calories/protein_g/carbs_g/fat_g must equal the sum of all items.\n" +
         "\n" +
-        "Amount field formatting (important):\n" +
-        "- The \"amount\" field must echo the user's portion wording verbatim, with the same unit they used. Do NOT append a normalized gram conversion in parentheses or any other form.\n" +
+        "Name and amount field formatting (important):\n" +
+        "- The \"name\" field must contain ONLY the food name — never a quantity or unit.\n" +
+        "- Write the name in the user's language, normalized to its base grammatical form (nominative case, as it would appear in a dictionary or on a menu). For example Croatian genitive \"pecenog krumpira\" becomes \"peceni krumpir\". Use a number (singular/plural) that reads naturally next to the amount.\n" +
+        "- The \"amount\" field must contain ONLY the quantity and unit, using the same unit the user typed. Do NOT repeat the food name in \"amount\" and do NOT append a normalized gram conversion.\n" +
         "- If the user named an obvious single item without a quantity, use one natural serving and do not write \"(assumed)\".\n" +
-        "- For vague bulk foods without a quantity, assume a typical serving for an average adult and write it in natural language followed by \"(assumed)\".\n" +
+        "- For vague bulk foods without a quantity, assume a typical serving for an average adult and append \"(assumed)\".\n" +
         "- Internally use grams for the calorie/macro math, but never surface those grams in \"amount\" unless the user typed grams.\n" +
         "Examples:\n" +
-        "  Input \"5 eggs\" -> amount: \"5 eggs\"\n" +
-        "  Input \"200g milk\" -> amount: \"200g milk\"\n" +
-        "  Input \"2dl whole milk\" -> amount: \"2dl whole milk\"\n" +
-        "  Input \"a slice of bread\" -> amount: \"1 slice of bread\"\n" +
-        "  Input \"lepinja\" -> amount: \"1 lepinja\"\n" +
-        "  Input \"cajna pasteta\" -> amount: \"1 cajna pasteta\"\n" +
-        "  Input \"eggs\" -> amount: \"2 eggs (assumed)\"\n" +
-        "  Input \"milk\" -> amount: \"1 cup milk (assumed)\""
+        "  Input \"5 eggs\" -> name: \"eggs\", amount: \"5\"\n" +
+        "  Input \"200g milk\" -> name: \"milk\", amount: \"200g\"\n" +
+        "  Input \"2dl whole milk\" -> name: \"whole milk\", amount: \"2dl\"\n" +
+        "  Input \"a slice of bread\" -> name: \"bread\", amount: \"1 slice\"\n" +
+        "  Input \"200g pecenog krumpira\" -> name: \"peceni krumpir\", amount: \"200g\"\n" +
+        "  Input \"5 jagoda\" -> name: \"jagode\", amount: \"5\"\n" +
+        "  Input \"lepinja\" -> name: \"lepinja\", amount: \"1\"\n" +
+        "  Input \"cajna pasteta\" -> name: \"cajna pasteta\", amount: \"1\"\n" +
+        "  Input \"eggs\" -> name: \"eggs\", amount: \"2 (assumed)\"\n" +
+        "  Input \"milk\" -> name: \"milk\", amount: \"1 cup (assumed)\""
 
     fun buildSystemMessages(userPrompt: String): List<ChatMessage> {
         return listOf(
