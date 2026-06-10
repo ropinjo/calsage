@@ -234,8 +234,20 @@ fun AddFoodScreen(
         !barcodeUiState.isLookupLoading &&
         !barcodeUiState.showServingDialog
 
-    BackHandler(enabled = barcodeUiState.isScannerVisible) {
-        viewModel.onScannerDismissed()
+    // From the result/error step, back returns to the description entry
+    // (text is kept in the ViewModel) instead of leaving the screen.
+    val canReturnToEntry = favoriteId == null &&
+        (uiState is AddFoodUiState.Result || uiState is AddFoodUiState.Error)
+    val handleBack: () -> Unit = {
+        when {
+            barcodeUiState.isScannerVisible -> viewModel.onScannerDismissed()
+            canReturnToEntry -> viewModel.switchToAiEntry()
+            else -> onBack()
+        }
+    }
+
+    BackHandler(enabled = barcodeUiState.isScannerVisible || canReturnToEntry) {
+        handleBack()
     }
 
     val mealLabel = mealType.lowercase()
@@ -263,7 +275,7 @@ fun AddFoodScreen(
                         }
                     },
                     navigationIcon = {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = handleBack) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = "Back"
