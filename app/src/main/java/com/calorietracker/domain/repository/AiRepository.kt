@@ -6,11 +6,15 @@ data class AiModel(
     val id: String,
     val name: String,
     val createdAtEpochSeconds: Long,
+    val privacy: String?,
     val traits: List<String>,
     val supportsResponseSchema: Boolean,
     val supportsReasoning: Boolean,
     val pricing: AiModelPricing?
-)
+) {
+    val isPrivate: Boolean
+        get() = privacy == "private"
+}
 
 data class AiModelPricing(
     val inputPerMillion: Float,

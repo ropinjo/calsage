@@ -105,6 +105,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.calorietracker.data.local.preferences.UserPreferencesDataStore
 import com.calorietracker.domain.repository.AiModel
+import com.calorietracker.domain.repository.AiModelPricing
 import com.calorietracker.presentation.common.components.PrimaryButton
 import com.calorietracker.presentation.common.components.SecondaryButton
 import com.calorietracker.presentation.theme.ThemePreference
@@ -801,7 +802,7 @@ private fun ModelSelectionSection(
         when {
             isLoading -> {
                 Text(
-                    "Loading latest private Venice text models...",
+                    "Loading Venice text models...",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -853,12 +854,23 @@ private fun ModelSelectionSection(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                     }
+                                    if (selectedModel.isPrivate) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        ModelPrivacyBadge()
+                                    }
                                 }
                                 Text(
                                     text = selectedModel.id,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                modelPricingLabel(selectedModel.pricing)?.let { pricingLabel ->
+                                    Text(
+                                        text = pricingLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 if (selectedModel.supportsReasoning) {
                                     Text(
                                         text = "Thinking available",
@@ -890,7 +902,7 @@ private fun ModelSelectionSection(
             else -> {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        errorMessage ?: "No compatible private text models available.",
+                        errorMessage ?: "No compatible text models available.",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (errorMessage != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1166,16 +1178,30 @@ private fun AiModelPickerRow(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(
-                text = model.name,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = model.name,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (model.isPrivate) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    ModelPrivacyBadge()
+                }
+            }
             Text(
                 text = model.id,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            modelPricingLabel(model.pricing)?.let { pricingLabel ->
+                Text(
+                    text = pricingLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Text(
                 text = "Added ${modelAddedDate(model.createdAtEpochSeconds)}",
                 style = MaterialTheme.typography.bodySmall,
@@ -1210,6 +1236,37 @@ private fun AiModelPickerRow(
                 modifier = Modifier.size(20.dp)
             )
         }
+    }
+}
+
+private fun modelPricingLabel(pricing: AiModelPricing?): String? {
+    if (pricing == null) return null
+    if (pricing.inputPerMillion == 0f && pricing.outputPerMillion == 0f) return "Free"
+    val input = formatUsdRate(pricing.inputPerMillion)
+    val output = formatUsdRate(pricing.outputPerMillion)
+    return "$$input in / $$output out per 1M tokens"
+}
+
+private fun formatUsdRate(value: Float): String {
+    return String.format(Locale.US, "%.3f", value)
+        .trimEnd('0')
+        .trimEnd('.')
+        .ifEmpty { "0" }
+}
+
+@Composable
+private fun ModelPrivacyBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = "Private",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.primary
+        )
     }
 }
 

@@ -39,8 +39,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
 
-private const val MODEL_PICKER_MODEL_LIMIT = 30
-
 @Singleton
 class AiRepositoryImpl @Inject constructor(
     private val veniceApiService: VeniceApiService,
@@ -197,41 +195,22 @@ class AiRepositoryImpl @Inject constructor(
 
             val response = veniceApiService.listModels(type = "text")
 
-            val allSupportedModels = response.data
+            val result = response.data
                 .asSequence()
                 .filter { it.type == "text" }
                 .filter { model ->
                     val spec = model.modelSpec
                     spec != null &&
-                        spec.privacy == "private" &&
                         !model.hasBetaTag() &&
                         spec.deprecation == null &&
                         spec.capabilities?.supportsResponseSchema == true
                 }
-                .toList()
-            val latestGlmModel = allSupportedModels
-                .filter { it.isGlmModel() }
-                .maxByOrNull { it.created }
-
-            val latestPrivateModels = allSupportedModels
-                .sortedByDescending { it.created }
-                .take(MODEL_PICKER_MODEL_LIMIT)
-
-            val pickerModels = if (
-                latestGlmModel != null &&
-                latestPrivateModels.none { it.id == latestGlmModel.id }
-            ) {
-                latestPrivateModels.dropLast(1) + latestGlmModel
-            } else {
-                latestPrivateModels
-            }
-
-            val result = pickerModels
                 .distinctBy { it.id }
                 .sortedByDescending { it.created }
                 .map { modelInfo ->
                     modelInfo.toAiModel()
                 }
+                .toList()
 
             // Cache pricing for cost calculation
             cachedModelPricing = result
@@ -462,11 +441,6 @@ $currentPrompt""")
         }
     }
 
-    private fun ModelInfo.isGlmModel(): Boolean {
-        return id.contains("glm", ignoreCase = true) ||
-            modelSpec?.name?.contains("glm", ignoreCase = true) == true
-    }
-
     private fun ModelInfo.hasBetaTag(): Boolean {
         return modelSpec?.traits?.any { it.contains("beta", ignoreCase = true) } == true
     }
@@ -476,6 +450,7 @@ $currentPrompt""")
             id = id,
             name = modelSpec?.name ?: id,
             createdAtEpochSeconds = created,
+            privacy = modelSpec?.privacy,
             traits = modelSpec?.traits ?: emptyList(),
             supportsResponseSchema = modelSpec?.capabilities?.supportsResponseSchema ?: false,
             supportsReasoning = modelSpec?.capabilities?.supportsReasoning ?: false,
