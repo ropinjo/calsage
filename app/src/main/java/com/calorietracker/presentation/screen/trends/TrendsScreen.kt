@@ -37,7 +37,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -46,17 +48,29 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.calorietracker.domain.model.WeightEntry
-import com.calorietracker.domain.repository.DailyCalorie
+import com.calorietracker.presentation.common.components.CHART_MAX_DAILY_BARS
+import com.calorietracker.presentation.common.components.CHART_MAX_DOTS
+import com.calorietracker.presentation.common.components.CHART_MAX_VALUE_LABELS
+import com.calorietracker.presentation.common.components.ChartScrubHeader
 import com.calorietracker.presentation.common.components.WeightHistoryChart
+import com.calorietracker.presentation.common.components.chartScrub
+import com.calorietracker.presentation.common.components.dateXFractions
+import com.calorietracker.presentation.common.components.formatScrubDate
+import com.calorietracker.presentation.common.components.formatScrubDay
+import com.calorietracker.presentation.common.components.nearestPointIndex
+import com.calorietracker.presentation.common.components.selectSpreadLabelIndices
+import java.time.DayOfWeek
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -159,7 +173,7 @@ fun TrendsScreen(
             ) {
                 when (uiState.selectedTab) {
                     TrendsTab.Calories -> {
-                        if (uiState.calorieData.isNotEmpty()) {
+                        if (uiState.calorieData.any { it.tracked }) {
                             CalorieBarChart(
                                 data = uiState.calorieData,
                                 goalLine = uiState.calorieGoal,
@@ -196,7 +210,7 @@ fun TrendsScreen(
             // --- Summary Stats ---
             when (uiState.selectedTab) {
                 TrendsTab.Calories -> {
-                    if (uiState.calorieData.isNotEmpty()) {
+                    if (uiState.calorieData.any { it.tracked }) {
                         CalorieSummary(uiState.calorieData, uiState.calorieGoal)
                     }
                 }
@@ -217,26 +231,95 @@ fun TrendsScreen(
     }
 }
 
+private data class CalorieBucket(
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val calories: Int,
+    val trackedDays: Int
+)
+
+// Beyond a month of daily bars the labels and bars become unreadable, so
+// aggregate into weekly averages per tracked day (comparable to the daily goal).
+private fun buildCalorieBuckets(data: List<DailyCaloriePoint>): List<CalorieBucket> {
+    val daily = data.map {
+        val date = LocalDate.parse(it.date)
+        CalorieBucket(date, date, it.totalCalories, if (it.tracked) 1 else 0)
+    }
+    if (daily.size <= CHART_MAX_DAILY_BARS) return daily
+    return daily
+        .groupBy { it.startDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)) }
+        .toSortedMap()
+        .map { (_, days) ->
+            val tracked = days.filter { it.trackedDays > 0 }
+            CalorieBucket(
+                startDate = days.first().startDate,
+                endDate = days.last().startDate,
+                calories = if (tracked.isEmpty()) 0 else tracked.map { it.calories }.average().roundToInt(),
+                trackedDays = tracked.size
+            )
+        }
+}
+
 @Composable
 private fun CalorieBarChart(
-    data: List<DailyCalorie>,
+    data: List<DailyCaloriePoint>,
     goalLine: Int,
     modifier: Modifier = Modifier
 ) {
-    val maxCal = remember(data, goalLine) {
-        (data.maxOfOrNull { it.totalCalories } ?: goalLine).coerceAtLeast(goalLine).toFloat() * 1.15f
+    val buckets = remember(data) { buildCalorieBuckets(data) }
+    val isWeekly = data.size > CHART_MAX_DAILY_BARS
+    val maxCal = remember(buckets, goalLine) {
+        (buckets.maxOfOrNull { it.calories } ?: goalLine).coerceAtLeast(goalLine).toFloat() * 1.15f
     }
-    val xAxisLabelIndices = remember(data) { selectAxisLabelIndices(data.size, maxLabels = 4) }
+    val showValueLabels = buckets.size <= CHART_MAX_VALUE_LABELS
+    val xAxisLabelIndices = remember(buckets) { selectAxisLabelIndices(buckets.size, maxLabels = 4) }
+    var selectedIndex by remember(buckets) { mutableStateOf<Int?>(null) }
+    var canvasWidth by remember { mutableStateOf(0) }
+
     val onSurfaceColor = MaterialTheme.colorScheme.onSurface
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
     val gridLineColor = onSurfaceVariantColor.copy(alpha = 0.18f)
     val warningColor = MaterialTheme.extendedColors.warning
     val primaryColor = MaterialTheme.colorScheme.primary
 
+    val headerText = selectedIndex?.let { index ->
+        val bucket = buckets[index]
+        if (isWeekly) {
+            val range = "${formatScrubDate(bucket.startDate)} - ${formatScrubDate(bucket.endDate)}"
+            if (bucket.trackedDays == 0) {
+                "$range • not tracked"
+            } else {
+                "$range • avg ${bucket.calories} kcal/day (${bucket.trackedDays} days tracked)"
+            }
+        } else {
+            val day = formatScrubDay(bucket.startDate)
+            if (bucket.trackedDays == 0) "$day • not tracked" else "$day • ${bucket.calories} kcal"
+        }
+    } ?: "Weekly averages".takeIf { isWeekly }
+
     Column(modifier = modifier) {
-        Box(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+        ChartScrubHeader(text = headerText)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp)
+                .onSizeChanged { canvasWidth = it.width }
+                .chartScrub(
+                    key = buckets,
+                    resolveIndex = { offset ->
+                        if (canvasWidth == 0 || buckets.isEmpty()) {
+                            null
+                        } else {
+                            (offset.x / (canvasWidth.toFloat() / buckets.size)).toInt()
+                                .coerceIn(0, buckets.size - 1)
+                        }
+                    },
+                    onTap = { index -> selectedIndex = if (selectedIndex == index) null else index },
+                    onScrub = { selectedIndex = it }
+                )
+        ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val barCount = data.size
+                val barCount = buckets.size
                 if (barCount == 0) return@Canvas
 
                 val chartTop = 26.dp.toPx()
@@ -267,6 +350,16 @@ private fun CalorieBarChart(
                     )
                 }
 
+                selectedIndex?.let { index ->
+                    val centerX = slotWidth * index + slotWidth / 2f
+                    drawLine(
+                        color = onSurfaceVariantColor.copy(alpha = 0.35f),
+                        start = Offset(centerX, chartTop),
+                        end = Offset(centerX, chartBottom),
+                        strokeWidth = 1.5.dp.toPx()
+                    )
+                }
+
                 // Goal line
                 val goalY = chartBottom - chartHeight * (goalLine / maxCal)
                 drawLine(
@@ -277,41 +370,47 @@ private fun CalorieBarChart(
                     pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f))
                 )
 
-                // Bars
-                data.forEachIndexed { index, entry ->
+                // Bars; untracked buckets stay empty so gaps in tracking are visible
+                buckets.forEachIndexed { index, bucket ->
                     val centerX = slotWidth * index + slotWidth / 2f
-                    val x = centerX - barWidth / 2f
-                    val barHeight = chartHeight * (entry.totalCalories / maxCal)
-                    val barTop = chartBottom - barHeight
-                    val barColor = if (entry.totalCalories > goalLine) warningColor.copy(alpha = 0.8f) else primaryColor.copy(alpha = 0.8f)
 
-                    drawRoundRect(
-                        color = barColor,
-                        topLeft = Offset(x, barTop),
-                        size = Size(barWidth, barHeight),
-                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
-                    )
+                    if (bucket.trackedDays > 0) {
+                        val x = centerX - barWidth / 2f
+                        val barHeight = chartHeight * (bucket.calories / maxCal)
+                        val barTop = chartBottom - barHeight
+                        val baseColor = if (bucket.calories > goalLine) warningColor else primaryColor
+                        val barColor = if (index == selectedIndex) baseColor else baseColor.copy(alpha = 0.8f)
 
-                    val textHeight = valuePaint.fontMetrics.run { descent - ascent }
-                    val defaultLabelBaseline = (barTop - 8.dp.toPx()).coerceAtLeast(textHeight)
-                    val labelTop = defaultLabelBaseline - textHeight
-                    val lineOverlapPadding = 6.dp.toPx()
-                    val labelBaseline = if (goalY in (labelTop - lineOverlapPadding)..(defaultLabelBaseline + lineOverlapPadding)) {
-                        (goalY - lineOverlapPadding).coerceAtLeast(textHeight)
-                    } else {
-                        defaultLabelBaseline
+                        drawRoundRect(
+                            color = barColor,
+                            topLeft = Offset(x, barTop),
+                            size = Size(barWidth, barHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8.dp.toPx())
+                        )
+
+                        if (showValueLabels) {
+                            val textHeight = valuePaint.fontMetrics.run { descent - ascent }
+                            val defaultLabelBaseline = (barTop - 8.dp.toPx()).coerceAtLeast(textHeight)
+                            val labelTop = defaultLabelBaseline - textHeight
+                            val lineOverlapPadding = 6.dp.toPx()
+                            val labelBaseline = if (goalY in (labelTop - lineOverlapPadding)..(defaultLabelBaseline + lineOverlapPadding)) {
+                                (goalY - lineOverlapPadding).coerceAtLeast(textHeight)
+                            } else {
+                                defaultLabelBaseline
+                            }
+
+                            drawContext.canvas.nativeCanvas.drawText(
+                                bucket.calories.toString(),
+                                centerX,
+                                labelBaseline,
+                                valuePaint
+                            )
+                        }
                     }
-
-                    drawContext.canvas.nativeCanvas.drawText(
-                        entry.totalCalories.toString(),
-                        centerX,
-                        labelBaseline,
-                        valuePaint
-                    )
 
                     if (index in xAxisLabelIndices) {
                         drawContext.canvas.nativeCanvas.drawText(
-                            formatAxisDate(entry.date),
+                            formatScrubDate(bucket.startDate),
                             centerX,
                             size.height - 8.dp.toPx(),
                             axisPaint
@@ -343,9 +442,10 @@ private fun CalorieBarChart(
 }
 
 @Composable
-private fun CalorieSummary(data: List<DailyCalorie>, goal: Int) {
-    val avg = remember(data) { data.map { it.totalCalories }.average().toInt() }
-    val daysOverGoal = remember(data, goal) { data.count { it.totalCalories > goal } }
+private fun CalorieSummary(data: List<DailyCaloriePoint>, goal: Int) {
+    val tracked = remember(data) { data.filter { it.tracked } }
+    val avg = remember(tracked) { tracked.map { it.totalCalories }.average().toInt() }
+    val daysOverGoal = remember(tracked, goal) { tracked.count { it.totalCalories > goal } }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -353,9 +453,9 @@ private fun CalorieSummary(data: List<DailyCalorie>, goal: Int) {
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Summary", style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold), color = MaterialTheme.colorScheme.onSurface)
-            SummaryRow("Average daily", "$avg kcal")
-            SummaryRow("Days tracked", "${data.size}")
-            SummaryRow("Days over goal", "$daysOverGoal / ${data.size}")
+            SummaryRow("Average on tracked days", "$avg kcal")
+            SummaryRow("Days tracked", "${tracked.size} / ${data.size}")
+            SummaryRow("Days over goal", "$daysOverGoal / ${tracked.size}")
         }
     }
 }
@@ -399,7 +499,12 @@ private fun MacroLineChart(
     val minAxisValue = yAxisTicks.firstOrNull() ?: macroValues.minOrNull().orZero()
     val maxAxisValue = yAxisTicks.lastOrNull() ?: macroValues.maxOrNull().orZero()
     val range = (maxAxisValue - minAxisValue).coerceAtLeast(1f)
-    val xAxisLabelIndices = remember(data) { selectAxisLabelIndices(data.size, maxLabels = 4) }
+    val xFractions = remember(data) { dateXFractions(data.map { it.date }) }
+    val xAxisLabelIndices = remember(xFractions) { selectSpreadLabelIndices(xFractions) }
+    val showDots = data.size <= CHART_MAX_DOTS
+    var selectedIndex by remember(data) { mutableStateOf<Int?>(null) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
+
     val onSurfaceVariantColor = MaterialTheme.colorScheme.onSurfaceVariant
     val axisColor = onSurfaceVariantColor.copy(alpha = 0.28f)
     val gridColor = onSurfaceVariantColor.copy(alpha = 0.18f)
@@ -408,8 +513,42 @@ private fun MacroLineChart(
     val carbsColor = MaterialTheme.extendedColors.carbs
     val fatColor = MaterialTheme.extendedColors.fat
 
+    val density = LocalDensity.current
+    // The gesture handler needs the same left inset the canvas draws with, so
+    // measure the axis labels here instead of inside the draw scope.
+    val leftPaddingPx = remember(yAxisTicks, density) {
+        with(density) {
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = 11.sp.toPx() }
+            maxOf(
+                42.dp.toPx(),
+                (yAxisTicks.maxOfOrNull { paint.measureText(formatMacroAxisLabel(it)) } ?: 0f) + 16.dp.toPx()
+            )
+        }
+    }
+    val rightPaddingPx = with(density) { 12.dp.toPx() }
+
+    val headerText = selectedIndex?.let { index ->
+        val entry = data[index]
+        "${formatScrubDay(LocalDate.parse(entry.date))} • P %.0fg · C %.0fg · F %.0fg"
+            .format(entry.protein, entry.carbs, entry.fat)
+    }
+
     Column(modifier = modifier) {
-        Box(modifier = Modifier.fillMaxWidth().height(250.dp)) {
+        ChartScrubHeader(text = headerText)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(250.dp)
+                .onSizeChanged { canvasSize = it }
+                .chartScrub(
+                    key = data,
+                    resolveIndex = { offset ->
+                        nearestPointIndex(offset.x, xFractions, canvasSize.width, leftPaddingPx, rightPaddingPx)
+                    },
+                    onTap = { index -> selectedIndex = if (selectedIndex == index) null else index },
+                    onScrub = { selectedIndex = it }
+                )
+        ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val pointCount = data.size
                 if (pointCount == 0) return@Canvas
@@ -423,12 +562,8 @@ private fun MacroLineChart(
                     textAlign = Paint.Align.CENTER
                     textSize = 11.sp.toPx()
                 }
-                val yAxisLabelValues = yAxisTicks.map { formatMacroAxisLabel(it) }
-                val leftPadding = maxOf(
-                    42.dp.toPx(),
-                    (yAxisLabelValues.maxOfOrNull { axisPaint.measureText(it) } ?: 0f) + 16.dp.toPx()
-                )
-                val rightPadding = 12.dp.toPx()
+                val leftPadding = leftPaddingPx
+                val rightPadding = rightPaddingPx
                 val topPadding = 16.dp.toPx()
                 val bottomPadding = 30.dp.toPx()
                 val chartWidth = size.width - leftPadding - rightPadding
@@ -467,13 +602,19 @@ private fun MacroLineChart(
                 }
 
                 fun pointFor(index: Int, value: Float): Offset {
-                    val x = if (pointCount == 1) {
-                        leftPadding + chartWidth / 2f
-                    } else {
-                        leftPadding + chartWidth * (index.toFloat() / (pointCount - 1))
-                    }
+                    val x = leftPadding + chartWidth * xFractions[index]
                     val y = topPadding + chartHeight * (1f - (value - minAxisValue) / range)
                     return Offset(x, y)
+                }
+
+                selectedIndex?.let { index ->
+                    val x = leftPadding + chartWidth * xFractions[index]
+                    drawLine(
+                        color = onSurfaceVariantColor.copy(alpha = 0.35f),
+                        start = Offset(x, topPadding),
+                        end = Offset(x, chartBottom),
+                        strokeWidth = 1.5.dp.toPx()
+                    )
                 }
 
                 fun drawSeries(values: List<Float>, color: androidx.compose.ui.graphics.Color) {
@@ -487,9 +628,15 @@ private fun MacroLineChart(
                         color = color,
                         style = Stroke(width = 3.dp.toPx())
                     )
-                    points.forEach { p ->
-                        drawCircle(color = color, radius = 5.dp.toPx(), center = p)
-                        drawCircle(color = surfaceColor, radius = 2.5.dp.toPx(), center = p)
+                    if (showDots) {
+                        points.forEach { p ->
+                            drawCircle(color = color, radius = 5.dp.toPx(), center = p)
+                            drawCircle(color = surfaceColor, radius = 2.5.dp.toPx(), center = p)
+                        }
+                    }
+                    selectedIndex?.let { index ->
+                        drawCircle(color = color, radius = 6.dp.toPx(), center = points[index])
+                        drawCircle(color = surfaceColor, radius = 3.dp.toPx(), center = points[index])
                     }
                 }
 
@@ -499,13 +646,9 @@ private fun MacroLineChart(
 
                 data.forEachIndexed { index, entry ->
                     if (index in xAxisLabelIndices) {
-                        val x = if (pointCount == 1) {
-                            leftPadding + chartWidth / 2f
-                        } else {
-                            leftPadding + chartWidth * (index.toFloat() / (pointCount - 1))
-                        }
+                        val x = leftPadding + chartWidth * xFractions[index]
                         drawContext.canvas.nativeCanvas.drawText(
-                            formatAxisDate(entry.date),
+                            formatScrubDate(entry.date),
                             x,
                             size.height - 8.dp.toPx(),
                             xAxisPaint
@@ -565,15 +708,6 @@ private fun EmptyChartPlaceholder(message: String) {
         contentAlignment = Alignment.Center
     ) {
         Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-private fun formatAxisDate(isoDate: String): String {
-    return try {
-        val date = LocalDate.parse(isoDate)
-        date.format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))
-    } catch (e: Exception) {
-        ""
     }
 }
 

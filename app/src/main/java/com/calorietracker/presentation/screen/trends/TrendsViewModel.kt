@@ -35,10 +35,16 @@ data class DailyMacros(
     val fat: Float
 )
 
+data class DailyCaloriePoint(
+    val date: String,
+    val totalCalories: Int,
+    val tracked: Boolean
+)
+
 data class TrendsUiState(
     val selectedTab: TrendsTab = TrendsTab.Calories,
     val selectedRange: TrendsRange = TrendsRange.ONE_WEEK,
-    val calorieData: List<DailyCalorie> = emptyList(),
+    val calorieData: List<DailyCaloriePoint> = emptyList(),
     val macroData: List<DailyMacros> = emptyList(),
     val calorieGoal: Int = 2000,
     val weightData: List<WeightEntry> = emptyList(),
@@ -102,7 +108,7 @@ class TrendsViewModel @Inject constructor(
             TrendsUiState(
                 selectedTab = baseState.selectedTab,
                 selectedRange = baseState.selectedRange,
-                calorieData = calorieData,
+                calorieData = fillUntrackedDays(calorieData, startDate, endDate),
                 macroData = macroData,
                 calorieGoal = baseState.calorieGoal,
                 weightData = weightData,
@@ -123,4 +129,30 @@ class TrendsViewModel @Inject constructor(
     fun selectRange(range: TrendsRange) {
         _selectedRange.value = range
     }
+}
+
+/**
+ * Expands sparse per-day totals into a continuous day series so untracked days
+ * appear as gaps instead of being silently skipped. The series starts at the
+ * first tracked day in range (not the range start) so charts don't lead with
+ * empty space from before the user began tracking.
+ */
+internal fun fillUntrackedDays(
+    data: List<DailyCalorie>,
+    startDate: String,
+    endDate: String
+): List<DailyCaloriePoint> {
+    if (data.isEmpty()) return emptyList()
+    val byDate = data.associateBy { it.date }
+    val firstTracked = LocalDate.parse(data.minOf { it.date })
+    var current = maxOf(LocalDate.parse(startDate), firstTracked)
+    val end = LocalDate.parse(endDate)
+    val result = mutableListOf<DailyCaloriePoint>()
+    while (current <= end) {
+        val date = current.format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val tracked = byDate[date]
+        result += DailyCaloriePoint(date, tracked?.totalCalories ?: 0, tracked != null)
+        current = current.plusDays(1)
+    }
+    return result
 }

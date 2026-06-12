@@ -12,6 +12,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.time.LocalDate
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -195,7 +196,9 @@ class CsvImportManager @Inject constructor(
             runCatching {
                 FoodEntryEntity(
                     id = 0,
-                    date = row[1],
+                    // Reject rows with non-ISO dates here so downstream date
+                    // parsing can trust everything stored in the database.
+                    date = LocalDate.parse(row[1]).toString(),
                     mealType = row[2],
                     description = row[3],
                     calories = row[4].toInt(),
@@ -215,7 +218,7 @@ class CsvImportManager @Inject constructor(
             runCatching {
                 WeightEntryEntity(
                     id = 0,
-                    date = row[1],
+                    date = LocalDate.parse(row[1]).toString(),
                     weightKg = row[2].toFloat(),
                     note = row[3].ifBlank { null },
                     timestamp = row[4].toLong()
