@@ -162,10 +162,12 @@ fun SettingsScreen(
     var fatDraft by rememberSaveable(uiState.fatTarget) {
         mutableStateOf(uiState.fatTarget.toInt().toString())
     }
-    val canSaveGoals = calorieDraft.toIntOrNull() != null &&
-        proteinDraft.toFloatOrNull() != null &&
-        carbsDraft.toFloatOrNull() != null &&
-        fatDraft.toFloatOrNull() != null
+    // Calories must be positive (0 breaks progress/goal-line displays); macro
+    // targets of 0 are legitimate (e.g. no specific fat goal).
+    val canSaveGoals = (calorieDraft.toIntOrNull() ?: 0) > 0 &&
+        (proteinDraft.toFloatOrNull() ?: -1f) >= 0f &&
+        (carbsDraft.toFloatOrNull() ?: -1f) >= 0f &&
+        (fatDraft.toFloatOrNull() ?: -1f) >= 0f
 
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
@@ -365,7 +367,7 @@ fun SettingsScreen(
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         StatRow("Input tokens", "%,d".format(uiState.inputTokens))
                         StatRow("Output tokens", "%,d".format(uiState.outputTokens))
-                        StatRow("Estimated cost", "$%.4f".format(uiState.cumulativeCost))
+                        StatRow("Estimated cost", "$%.4f".format(Locale.US, uiState.cumulativeCost))
                         val balanceDisplay = uiState.veniceBalanceUsd
                             ?.toDoubleOrNull()
                             ?.let { "$%.4f".format(Locale.US, it) }
@@ -1186,6 +1188,10 @@ private fun AiModelPickerRow(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
+                if (model.isBeta) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    ModelBetaBadge()
+                }
                 if (model.isPrivate) {
                     Spacer(modifier = Modifier.width(6.dp))
                     ModelPrivacyBadge()
@@ -1256,6 +1262,22 @@ private fun ModelPrivacyBadge() {
             text = "Private",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun ModelBetaBadge() {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = "Beta",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.tertiary
         )
     }
 }
@@ -1387,6 +1409,7 @@ private fun getDateRange(range: String): Pair<String?, String?> {
         else -> return Pair(null, null)
     }
     val end = java.time.LocalDate.now()
-    val start = end.minusDays(days)
+    // Inclusive bounds: "7d" = today plus the 6 days before it, matching Trends.
+    val start = end.minusDays(days - 1)
     return Pair(start.toString(), end.toString())
 }

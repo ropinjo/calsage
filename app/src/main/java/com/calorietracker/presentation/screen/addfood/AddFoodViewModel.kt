@@ -324,9 +324,15 @@ class AddFoodViewModel @Inject constructor(
         logFood(updateFavorite = false)
     }
 
+    // Inserts suspend before the state resets to Idle, so without this flag a
+    // fast double-tap on Save would log the meal twice and pop two screens.
+    private var isLogging = false
+
     private fun logFood(updateFavorite: Boolean) {
         val state = _uiState.value
         if (state !is AddFoodUiState.Result) return
+        if (isLogging) return
+        isLogging = true
 
         viewModelScope.launch {
             val args = routeArgs.value
@@ -423,7 +429,7 @@ class AddFoodViewModel @Inject constructor(
             _foodDescription.value = TextFieldValue()
             _uiState.value = AddFoodUiState.Idle
             _events.emit(AddFoodEvent.FoodLogged)
-        }
+        }.invokeOnCompletion { isLogging = false }
     }
 
     fun switchToManualEntry() {
@@ -442,6 +448,8 @@ class AddFoodViewModel @Inject constructor(
         val state = _uiState.value
         if (state !is AddFoodUiState.ManualEntry) return
         if (!ManualEntryValidator.isValid(state)) return
+        if (isLogging) return
+        isLogging = true
 
         val name = state.name.ifBlank { "Custom entry" }
         val calories = state.calories.toIntOrNull() ?: 0
@@ -472,7 +480,7 @@ class AddFoodViewModel @Inject constructor(
             _foodDescription.value = TextFieldValue()
             _uiState.value = AddFoodUiState.Idle
             _events.emit(AddFoodEvent.FoodLogged)
-        }
+        }.invokeOnCompletion { isLogging = false }
     }
 
     fun toggleFavorite() {

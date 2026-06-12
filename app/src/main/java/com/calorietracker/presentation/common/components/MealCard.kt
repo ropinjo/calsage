@@ -42,7 +42,9 @@ fun MealCard(
     modifier: Modifier = Modifier
 ) {
     val mealIcon = getMealIcon(mealType)
-    val isEmpty = totalCalories == 0
+    // Keyed on item count, not calories: a meal of only zero-calorie items
+    // (water, diet drinks) is not empty.
+    val isEmpty = itemCount == 0
 
     Card(
         onClick = onClick,

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "00487f8e8953602f66702c296d245b0e",
+    "identityHash": "9b2f3e78ab9b3ee84a655ecc85a217de",
     "entities": [
       {
         "tableName": "food_entries",
@@ -201,7 +201,7 @@
       },
       {
         "tableName": "user_goals",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `calorie_target` INTEGER NOT NULL DEFAULT 2000, `protein_target_grams` REAL NOT NULL DEFAULT 150, `carbs_target_grams` REAL NOT NULL DEFAULT 250, `fat_target_grams` REAL NOT NULL DEFAULT 65, `target_weight_kg` REAL, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `calorie_target` INTEGER NOT NULL DEFAULT 2000, `protein_target_grams` REAL NOT NULL DEFAULT 150, `carbs_target_grams` REAL NOT NULL DEFAULT 200, `fat_target_grams` REAL NOT NULL DEFAULT 67, `target_weight_kg` REAL, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "id",
@@ -228,14 +228,14 @@
             "columnName": "carbs_target_grams",
             "affinity": "REAL",
             "notNull": true,
-            "defaultValue": "250"
+            "defaultValue": "200"
           },
           {
             "fieldPath": "fatTargetGrams",
             "columnName": "fat_target_grams",
             "affinity": "REAL",
             "notNull": true,
-            "defaultValue": "65"
+            "defaultValue": "67"
           },
           {
             "fieldPath": "targetWeightKg",
@@ -253,7 +253,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '00487f8e8953602f66702c296d245b0e')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '9b2f3e78ab9b3ee84a655ecc85a217de')"
     ]
   }
 }

@@ -36,8 +36,8 @@ data class OnboardingState(
     val calculatedTdee: Float? = null,
     val calorieTarget: String = "2000",
     val proteinTarget: String = "150",
-    val carbsTarget: String = "250",
-    val fatTarget: String = "65",
+    val carbsTarget: String = "200",
+    val fatTarget: String = "67",
     val apiKey: String = "",
     val apiKeyValid: Boolean = false,
     val isValidatingApiKey: Boolean = false,
@@ -197,10 +197,14 @@ class OnboardingViewModel @Inject constructor(
     }
 
     private fun List<AiModel>.defaultModelOrNull(): AiModel? {
-        return filter { model ->
+        // Betas are listed for manual selection but never auto-assigned —
+        // Venice marks them "not recommended for production use".
+        val stable = filterNot { it.isBeta }.ifEmpty { this }
+        return stable.filter { model ->
             model.id.contains("glm", ignoreCase = true) ||
                 model.name.contains("glm", ignoreCase = true)
-        }.maxByOrNull { it.createdAtEpochSeconds } ?: maxByOrNull { it.createdAtEpochSeconds }
+        }.maxByOrNull { it.createdAtEpochSeconds }
+            ?: stable.maxByOrNull { it.createdAtEpochSeconds }
     }
 
     fun toggleThinking() {
@@ -249,12 +253,13 @@ class OnboardingViewModel @Inject constructor(
             )
             userPreferencesDataStore.saveUserProfile(profile)
 
-            // Save goals
+            // Save goals; a 0 or unparsable calorie target falls back to the
+            // default rather than saving a goal that breaks progress displays
             val goals = UserGoals(
-                calorieTarget = s.calorieTarget.toIntOrNull() ?: 2000,
-                proteinTargetGrams = s.proteinTarget.toFloatOrNull() ?: 150f,
-                carbsTargetGrams = s.carbsTarget.toFloatOrNull() ?: 250f,
-                fatTargetGrams = s.fatTarget.toFloatOrNull() ?: 65f
+                calorieTarget = s.calorieTarget.toIntOrNull()?.takeIf { it > 0 } ?: 2000,
+                proteinTargetGrams = s.proteinTarget.toFloatOrNull()?.takeIf { it >= 0f } ?: 150f,
+                carbsTargetGrams = s.carbsTarget.toFloatOrNull()?.takeIf { it >= 0f } ?: 200f,
+                fatTargetGrams = s.fatTarget.toFloatOrNull()?.takeIf { it >= 0f } ?: 67f
             )
             goalsRepository.saveGoals(goals)
 

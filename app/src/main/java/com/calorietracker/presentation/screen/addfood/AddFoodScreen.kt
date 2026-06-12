@@ -803,7 +803,12 @@ private fun ResultContent(
                 text = if (state.isAlreadyFavorite) "Update favorite" else "Save meal",
                 onClick = onLog,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isAlreadyFavorite || state.favoriteName.isNotBlank()
+                // A blank name would silently skip the favorite insert/update
+                enabled = if (state.isAlreadyFavorite || state.saveAsFavorite) {
+                    state.favoriteName.isNotBlank()
+                } else {
+                    true
+                }
             )
         }
     }

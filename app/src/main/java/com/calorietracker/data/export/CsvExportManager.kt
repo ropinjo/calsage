@@ -67,6 +67,8 @@ class CsvExportManager @Inject constructor(
         }
 
         val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+        // Stale exports hold a full copy of the user's data; keep only the newest.
+        exportDir.listFiles()?.forEach { it.delete() }
         val zipFile = File(exportDir, "calsage_export_${System.currentTimeMillis()}.zip")
 
         ZipOutputStream(FileOutputStream(zipFile)).use { zos ->
@@ -125,7 +127,7 @@ class CsvExportManager @Inject constructor(
 
             // Favorites CSV
             addCsvToZip(zos, "favorites.csv") { writer ->
-                writer.writeLine("ID,Name,Description,Total Calories,Total Protein (g),Total Carbs (g),Total Fat (g),Meal Type,Source")
+                writer.writeLine("ID,Name,Description,Total Calories,Total Protein (g),Total Carbs (g),Total Fat (g),Meal Type,Source,Items JSON")
                 for (fav in favorites) {
                     writer.writeLine(
                         "${fav.id}," +
@@ -136,7 +138,8 @@ class CsvExportManager @Inject constructor(
                         "${fav.totalCarbs}," +
                         "${fav.totalFat}," +
                         "${escapeCsv(fav.mealType)}," +
-                        "${escapeCsv(fav.source)}"
+                        "${escapeCsv(fav.source)}," +
+                        "${escapeCsv(fav.itemsJson ?: "")}"
                     )
                 }
             }

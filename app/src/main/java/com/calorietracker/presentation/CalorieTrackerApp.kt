@@ -170,10 +170,10 @@ fun CalorieTrackerApp(
                     is DashboardDestination -> {
                         DashboardScreen(
                             onNavigateToAddFood = { mealType, date ->
-                                backStack.add(AddFoodDestination(mealType, date))
+                                backStack.push(AddFoodDestination(mealType, date))
                             },
                             onNavigateToMealDetail = { mealType, date ->
-                                backStack.add(MealDetailDestination(mealType, date))
+                                backStack.push(MealDetailDestination(mealType, date))
                             }
                         )
                     }
@@ -208,7 +208,7 @@ fun CalorieTrackerApp(
                                 backStack.add(SettingsDestination)
                             },
                             onNavigateToFavorites = { mealType ->
-                                backStack.add(FavoritesDestination(mealType = mealType, date = destination.date))
+                                backStack.push(FavoritesDestination(mealType = mealType, date = destination.date))
                             }
                         )
                     }
@@ -219,7 +219,7 @@ fun CalorieTrackerApp(
                             date = destination.date,
                             onNavigateBack = { backStack.removeLastOrNull() },
                             onNavigateToAddFood = { mealType, date ->
-                                backStack.add(AddFoodDestination(mealType, date))
+                                backStack.push(AddFoodDestination(mealType, date))
                             }
                         )
                     }
@@ -230,7 +230,7 @@ fun CalorieTrackerApp(
                             date = destination.date,
                             onNavigateBack = { backStack.removeLastOrNull() },
                             onEditFavorite = { favoriteId, date ->
-                                backStack.add(
+                                backStack.push(
                                     AddFoodDestination(
                                         mealType = destination.mealType,
                                         date = date,
@@ -253,6 +253,19 @@ fun CalorieTrackerApp(
             }
         }
     }
+}
+
+// A fast double-tap fires a click handler twice; pushing the same screen twice
+// stacks a duplicate the user has to back out of. AddFood's random entryKey
+// would defeat a plain equality check, so it is ignored for the comparison.
+private fun MutableList<AppDestination>.push(destination: AppDestination) {
+    val top = lastOrNull()
+    val duplicate = if (destination is AddFoodDestination && top is AddFoodDestination) {
+        destination.copy(entryKey = top.entryKey) == top
+    } else {
+        destination == top
+    }
+    if (!duplicate) add(destination)
 }
 
 private val appBackStackSaver: Saver<androidx.compose.runtime.snapshots.SnapshotStateList<AppDestination>, String> = Saver(

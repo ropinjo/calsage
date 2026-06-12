@@ -27,6 +27,7 @@ data class ModelSpec(
     val name: String? = null,
     val privacy: String? = null,
     val traits: List<String> = emptyList(),
+    val betaModel: Boolean = false,
     val deprecation: ModelDeprecation? = null,
     val capabilities: ModelCapabilities? = null,
     val pricing: ModelPricing? = null

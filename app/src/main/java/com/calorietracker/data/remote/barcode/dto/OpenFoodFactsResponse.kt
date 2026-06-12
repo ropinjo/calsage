@@ -17,10 +17,10 @@ data class OpenFoodFactsResponse(
 
     @Serializable
     data class Nutriments(
-        @SerialName("energy-kcal_100g") val kcalPer100g: Float = 0f,
-        @SerialName("energy_100g") val energyKjPer100g: Float = 0f,
-        @SerialName("proteins_100g") val proteinPer100g: Float = 0f,
-        @SerialName("carbohydrates_100g") val carbsPer100g: Float = 0f,
-        @SerialName("fat_100g") val fatPer100g: Float = 0f
+        @SerialName("energy-kcal_100g") val kcalPer100g: Float? = null,
+        @SerialName("energy_100g") val energyKjPer100g: Float? = null,
+        @SerialName("proteins_100g") val proteinPer100g: Float? = null,
+        @SerialName("carbohydrates_100g") val carbsPer100g: Float? = null,
+        @SerialName("fat_100g") val fatPer100g: Float? = null
     )
 }

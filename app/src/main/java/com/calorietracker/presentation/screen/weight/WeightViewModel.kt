@@ -119,7 +119,8 @@ class WeightViewModel @Inject constructor(
     }
 
     fun logWeight() {
-        val rawWeight = _weightInput.value.replace(',', '.').toFloatOrNull() ?: return
+        val rawWeight = _weightInput.value.replace(',', '.').toFloatOrNull()
+            ?.takeIf { it > 0f } ?: return
         val note = _noteInput.value.ifBlank { null }
         _weightInput.value = ""
         _noteInput.value = ""

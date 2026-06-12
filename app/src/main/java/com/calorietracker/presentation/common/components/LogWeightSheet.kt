@@ -53,7 +53,7 @@ fun LogWeightSheet(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val weightFocusRequester = remember { FocusRequester() }
-    val canSubmit = weightInput.replace(',', '.').toFloatOrNull() != null
+    val canSubmit = (weightInput.replace(',', '.').toFloatOrNull() ?: 0f) > 0f
 
     // Wait until the sheet has settled before requesting focus, so the keyboard
     // rises after the enter animation finishes instead of fighting it.

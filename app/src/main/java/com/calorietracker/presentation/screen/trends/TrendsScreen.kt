@@ -444,7 +444,10 @@ private fun CalorieBarChart(
 @Composable
 private fun CalorieSummary(data: List<DailyCaloriePoint>, goal: Int) {
     val tracked = remember(data) { data.filter { it.tracked } }
-    val avg = remember(tracked) { tracked.map { it.totalCalories }.average().toInt() }
+    // Rounded, not truncated, so the summary matches the weekly bars
+    val avg = remember(tracked) {
+        if (tracked.isEmpty()) 0 else tracked.map { it.totalCalories }.average().roundToInt()
+    }
     val daysOverGoal = remember(tracked, goal) { tracked.count { it.totalCalories > goal } }
 
     Card(

@@ -7,7 +7,8 @@ import kotlinx.serialization.Serializable
 data class ChatCompletionResponse(
     val id: String,
     val choices: List<Choice>,
-    val usage: Usage
+    val usage: Usage,
+    val model: String? = null
 )
 
 @Serializable

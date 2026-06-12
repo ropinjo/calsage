@@ -4,9 +4,12 @@ import com.calorietracker.data.remote.barcode.OpenFoodFactsApiService
 import com.calorietracker.data.remote.barcode.dto.OpenFoodFactsResponse
 import com.calorietracker.domain.repository.BarcodeLookupResult
 import kotlinx.coroutines.test.runTest
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 import java.io.IOException
 
 class OpenFoodFactsBarcodeRepositoryTest {
@@ -99,7 +102,7 @@ class OpenFoodFactsBarcodeRepositoryTest {
     }
 
     @Test
-    fun `returns incomplete data when all nutrient values are zero`() = runTest {
+    fun `returns incomplete data when all nutrient values are absent`() = runTest {
         val repository = OpenFoodFactsBarcodeRepository(
             apiService = FakeOpenFoodFactsApiService {
                 OpenFoodFactsResponse(
@@ -117,6 +120,47 @@ class OpenFoodFactsBarcodeRepositoryTest {
         assertTrue(result is BarcodeLookupResult.IncompleteData)
         result as BarcodeLookupResult.IncompleteData
         assertEquals("Mystery snack", result.productName)
+    }
+
+    @Test
+    fun `returns not found when api responds with http 404`() = runTest {
+        val repository = OpenFoodFactsBarcodeRepository(
+            apiService = FakeOpenFoodFactsApiService {
+                throw HttpException(
+                    Response.error<OpenFoodFactsResponse>(404, "".toResponseBody())
+                )
+            }
+        )
+
+        val result = repository.getProduct("666")
+
+        assertTrue(result is BarcodeLookupResult.NotFound)
+    }
+
+    @Test
+    fun `returns found for product with explicit zero nutrition`() = runTest {
+        val repository = OpenFoodFactsBarcodeRepository(
+            apiService = FakeOpenFoodFactsApiService {
+                OpenFoodFactsResponse(
+                    status = 1,
+                    product = OpenFoodFactsResponse.Product(
+                        name = "Mineral water",
+                        nutriments = OpenFoodFactsResponse.Nutriments(
+                            kcalPer100g = 0f,
+                            proteinPer100g = 0f,
+                            carbsPer100g = 0f,
+                            fatPer100g = 0f
+                        )
+                    )
+                )
+            }
+        )
+
+        val result = repository.getProduct("777")
+
+        assertTrue(result is BarcodeLookupResult.Found)
+        result as BarcodeLookupResult.Found
+        assertEquals(0, result.nutritionPer100g.calories)
     }
 
     @Test

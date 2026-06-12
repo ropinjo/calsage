@@ -503,18 +503,31 @@ private fun EditableEntryCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            // Parse like AddFood's editor (comma decimals included) and disable
+            // Save on invalid input instead of silently keeping old values.
+            val parsedCalories = calories.trim().toIntOrNull()
+            val parsedProtein = protein.trim().replace(',', '.').toFloatOrNull()
+            val parsedCarbs = carbs.trim().replace(',', '.').toFloatOrNull()
+            val parsedFat = fat.trim().replace(',', '.').toFloatOrNull()
+            val isValid = description.isNotBlank() &&
+                parsedCalories != null && parsedCalories >= 0 &&
+                parsedProtein != null && parsedProtein >= 0f &&
+                parsedCarbs != null && parsedCarbs >= 0f &&
+                parsedFat != null && parsedFat >= 0f
+
             Button(
                 onClick = {
                     onSave(
                         entry.copy(
                             description = description,
-                            calories = calories.toIntOrNull() ?: entry.calories,
-                            protein = protein.toFloatOrNull() ?: entry.protein,
-                            carbs = carbs.toFloatOrNull() ?: entry.carbs,
-                            fat = fat.toFloatOrNull() ?: entry.fat
+                            calories = parsedCalories ?: entry.calories,
+                            protein = parsedProtein ?: entry.protein,
+                            carbs = parsedCarbs ?: entry.carbs,
+                            fat = parsedFat ?: entry.fat
                         )
                     )
                 },
+                enabled = isValid,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
@@ -544,7 +557,7 @@ private fun MealDetailTextField(
         },
         singleLine = true,
         textStyle = MaterialTheme.typography.bodySmall,
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant,

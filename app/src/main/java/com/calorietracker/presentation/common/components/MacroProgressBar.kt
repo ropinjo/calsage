@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.calorietracker.presentation.theme.MotionDurations
 import com.calorietracker.presentation.theme.motionTween
+import kotlin.math.roundToInt
 
 @Composable
 fun MacroProgressBar(
@@ -56,7 +57,7 @@ fun MacroProgressBar(
                 color = color
             )
             Text(
-                text = "${current.toInt()} / ${target.toInt()}$unit",
+                text = "${current.roundToInt()} / ${target.roundToInt()}$unit",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

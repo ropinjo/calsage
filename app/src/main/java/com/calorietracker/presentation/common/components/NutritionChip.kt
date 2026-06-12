@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 
 @Composable
 fun NutritionChip(
@@ -30,7 +31,7 @@ fun NutritionChip(
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = "$label ${value.toInt()}g",
+            text = "$label ${value.roundToInt()}g",
             style = MaterialTheme.typography.labelMedium.copy(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp

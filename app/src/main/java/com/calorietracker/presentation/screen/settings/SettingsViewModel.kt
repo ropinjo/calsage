@@ -44,8 +44,8 @@ data class SettingsUiState(
     val customPrompt: String? = null,
     val calorieTarget: Int = 2000,
     val proteinTarget: Float = 150f,
-    val carbsTarget: Float = 250f,
-    val fatTarget: Float = 65f,
+    val carbsTarget: Float = 200f,
+    val fatTarget: Float = 67f,
     val selectedUnit: String = "kg",
     val inputTokens: Long = 0L,
     val outputTokens: Long = 0L,
@@ -346,10 +346,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun List<AiModel>.defaultModel(): AiModel {
-        return filter { model ->
+        // Betas are listed for manual selection but never auto-assigned —
+        // Venice marks them "not recommended for production use".
+        val stable = filterNot { it.isBeta }.ifEmpty { this }
+        return stable.filter { model ->
             model.id.contains("glm", ignoreCase = true) ||
                 model.name.contains("glm", ignoreCase = true)
-        }.maxByOrNull { it.createdAtEpochSeconds } ?: maxByOrNull { it.createdAtEpochSeconds } ?: first()
+        }.maxByOrNull { it.createdAtEpochSeconds }
+            ?: stable.maxByOrNull { it.createdAtEpochSeconds }
+            ?: first()
     }
 
     fun updateCustomPrompt(prompt: String) {

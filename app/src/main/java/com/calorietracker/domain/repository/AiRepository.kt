@@ -8,6 +8,7 @@ data class AiModel(
     val createdAtEpochSeconds: Long,
     val privacy: String?,
     val traits: List<String>,
+    val isBeta: Boolean = false,
     val supportsResponseSchema: Boolean,
     val supportsReasoning: Boolean,
     val pricing: AiModelPricing?

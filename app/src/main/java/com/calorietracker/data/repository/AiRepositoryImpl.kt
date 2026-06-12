@@ -23,6 +23,7 @@ import com.calorietracker.domain.repository.AiModel
 import com.calorietracker.domain.repository.AiModelExtendedPricing
 import com.calorietracker.domain.repository.AiModelPricing
 import com.calorietracker.domain.repository.AiRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -51,20 +52,22 @@ class AiRepositoryImpl @Inject constructor(
 
     override suspend fun analyzeFood(description: String): Result<NutritionInfo> {
         return try {
-            // 1. Check cache
-            val cached = nutritionCache.get(description)
-            if (cached != null) return Result.success(cached)
-
-            // 2. Load config
+            // 1. Load config
             val config = loadAiConfig()
             if (config.apiKey.isBlank()) {
                 return Result.failure(IllegalStateException("API key not configured. Set your Venice AI key in Settings."))
             }
             apiKeyHolder.apiKey = config.apiKey
-
-            // 3. Build request
             val customPrompt = userPreferencesDataStore.customPrompt.firstOrNull()
                 ?: UserPreferencesDataStore.DEFAULT_CUSTOM_PROMPT
+
+            // 2. Check cache — keyed by model + prompt so changing either
+            // in Settings doesn't serve results produced under the old setup
+            val cacheKey = "${config.model}|${customPrompt.hashCode()}|$description"
+            val cached = nutritionCache.get(cacheKey)
+            if (cached != null) return Result.success(cached)
+
+            // 3. Build request
             val systemMessages = NutritionPromptBuilder.buildSystemMessages(customPrompt)
             val allMessages = systemMessages + ChatMessage(role = "user", content = description)
 
@@ -124,10 +127,10 @@ class AiRepositoryImpl @Inject constructor(
             val nutritionInfo = dto.toDomain()
 
             // 6. Cache
-            nutritionCache.put(description, nutritionInfo)
+            nutritionCache.put(cacheKey, nutritionInfo)
 
             // 7. Track usage and cost
-            val modelPricing = getSelectedModelPricing(config.model)
+            val modelPricing = resolveModelPricing(config.model, response.model)
             val requestCost = calculateRequestCost(
                 response.usage,
                 modelPricing
@@ -140,6 +143,8 @@ class AiRepositoryImpl @Inject constructor(
 
             Result.success(nutritionInfo)
 
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: VeniceRateLimitException) {
             Result.failure(e)
         } catch (e: HttpException) {
@@ -167,6 +172,10 @@ class AiRepositoryImpl @Inject constructor(
             } finally {
                 apiKeyHolder.apiKey = previousKey
             }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: VeniceRateLimitException) {
+            Result.failure(e)
         } catch (e: HttpException) {
             if (e.code() == 401) {
                 val error = parseVeniceError(e, "Authentication failed")
@@ -201,7 +210,6 @@ class AiRepositoryImpl @Inject constructor(
                 .filter { model ->
                     val spec = model.modelSpec
                     spec != null &&
-                        !model.hasBetaTag() &&
                         spec.deprecation == null &&
                         spec.capabilities?.supportsResponseSchema == true
                 }
@@ -212,12 +220,13 @@ class AiRepositoryImpl @Inject constructor(
                 }
                 .toList()
 
-            // Cache pricing for cost calculation
-            cachedModelPricing = result
-                .filter { it.pricing != null }
-                .associate { it.id to it.pricing!! }
+            // Cache pricing from the full catalog so cost lookups also hit for
+            // models excluded from the picker (e.g. a previously selected one)
+            cacheModelPricing(response.data)
 
             Result.success(result)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: HttpException) {
             if (e.code() == 401) Result.failure(SecurityException(parseVeniceErrorMessage(e, "Authentication failed")))
             else Result.failure(IOException(parseVeniceErrorMessage(e, "Server error")))
@@ -261,7 +270,7 @@ $currentPrompt""")
                 ?.trim()
                 ?: return Result.failure(IllegalStateException("Empty response"))
 
-            val modelPricing = getSelectedModelPricing(config.model)
+            val modelPricing = resolveModelPricing(config.model, response.model)
             val requestCost = calculateRequestCost(
                 response.usage,
                 modelPricing
@@ -273,6 +282,8 @@ $currentPrompt""")
             )
 
             Result.success(improved)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -335,8 +346,27 @@ $currentPrompt""")
     @Volatile
     private var cachedModelPricing: Map<String, AiModelPricing> = emptyMap()
 
-    private fun getSelectedModelPricing(modelId: String): AiModelPricing? {
-        return cachedModelPricing[modelId]
+    private suspend fun resolveModelPricing(
+        requestedModel: String,
+        resolvedModel: String?
+    ): AiModelPricing? {
+        pricingFor(requestedModel, resolvedModel)?.let { return it }
+        // Pricing is only known after a models fetch; do one lazily so cost
+        // tracking also works in sessions that never open Settings.
+        runCatching { cacheModelPricing(veniceApiService.listModels(type = "text").data) }
+        return pricingFor(requestedModel, resolvedModel)
+    }
+
+    private fun pricingFor(requestedModel: String, resolvedModel: String?): AiModelPricing? {
+        // The request may use a trait alias (e.g. "most_intelligent"); the
+        // response carries the concrete model id, which is what pricing is keyed by.
+        return resolvedModel?.let { cachedModelPricing[it] } ?: cachedModelPricing[requestedModel]
+    }
+
+    private fun cacheModelPricing(models: List<ModelInfo>) {
+        cachedModelPricing = models
+            .mapNotNull { info -> info.modelSpec?.pricing?.let { info.id to info.toAiModel().pricing!! } }
+            .toMap()
     }
 
     private fun calculateRequestCost(
@@ -441,10 +471,6 @@ $currentPrompt""")
         }
     }
 
-    private fun ModelInfo.hasBetaTag(): Boolean {
-        return modelSpec?.traits?.any { it.contains("beta", ignoreCase = true) } == true
-    }
-
     private fun ModelInfo.toAiModel(): AiModel {
         return AiModel(
             id = id,
@@ -452,6 +478,9 @@ $currentPrompt""")
             createdAtEpochSeconds = created,
             privacy = modelSpec?.privacy,
             traits = modelSpec?.traits ?: emptyList(),
+            // model_spec.betaModel is the documented beta indicator
+            // (docs.venice.ai/overview/beta-models)
+            isBeta = modelSpec?.betaModel == true,
             supportsResponseSchema = modelSpec?.capabilities?.supportsResponseSchema ?: false,
             supportsReasoning = modelSpec?.capabilities?.supportsReasoning ?: false,
             pricing = modelSpec?.pricing?.let {

@@ -86,9 +86,17 @@ fun DashboardScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     DisposableEffect(lifecycleOwner, viewModel) {
+        // addObserver replays synthetic up-events on an already-started lifecycle
+        // (e.g. when navigating back here), which must not reset the selected date;
+        // only a real background -> foreground transition should.
+        var ignoreStart = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_START) {
-                viewModel.selectToday()
+            when (event) {
+                Lifecycle.Event.ON_START -> {
+                    if (ignoreStart) ignoreStart = false else viewModel.selectToday()
+                }
+                Lifecycle.Event.ON_STOP -> ignoreStart = false
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

@@ -2,12 +2,15 @@ package com.calorietracker.data.export
 
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
+import com.calorietracker.data.local.db.AppDatabase
 import com.calorietracker.data.local.db.dao.FavoriteMealDao
 import com.calorietracker.data.local.db.dao.FoodEntryDao
 import com.calorietracker.data.local.db.dao.WeightEntryDao
 import com.calorietracker.data.local.db.entity.FavoriteMealEntity
 import com.calorietracker.data.local.db.entity.FoodEntryEntity
 import com.calorietracker.data.local.db.entity.WeightEntryEntity
+import com.calorietracker.domain.model.MealType
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,6 +39,7 @@ enum class ImportMode {
 
 @Singleton
 class CsvImportManager @Inject constructor(
+    private val database: AppDatabase,
     private val foodEntryDao: FoodEntryDao,
     private val weightEntryDao: WeightEntryDao,
     private val favoriteMealDao: FavoriteMealDao,
@@ -105,11 +109,12 @@ class CsvImportManager @Inject constructor(
         foodEntries: List<FoodEntryEntity>,
         weightEntries: List<WeightEntryEntity>,
         favorites: List<FavoriteMealEntity>
-    ): ImportResult {
+    ): ImportResult = database.withTransaction {
+        // Chunked to stay under SQLite's bind-variable limit on long histories.
         val foodDates = foodEntries.map { it.date }.distinct()
-        if (foodDates.isNotEmpty()) foodEntryDao.deleteByDates(foodDates)
+        foodDates.chunked(500).forEach { foodEntryDao.deleteByDates(it) }
         val weightDates = weightEntries.map { it.date }.distinct()
-        if (weightDates.isNotEmpty()) weightEntryDao.deleteByDates(weightDates)
+        weightDates.chunked(500).forEach { weightEntryDao.deleteByDates(it) }
 
         val existingFavorites = favoriteMealDao.getAllFavoritesOnce()
         val existingByKey = existingFavorites.associateBy { it.name to it.mealType }
@@ -123,7 +128,7 @@ class CsvImportManager @Inject constructor(
         weightEntries.forEach { weightEntryDao.insert(it) }
         favorites.forEach { favoriteMealDao.insert(it) }
 
-        return ImportResult(
+        ImportResult(
             foodEntries = foodEntries.size,
             weightEntries = weightEntries.size,
             favorites = favorites.size,
@@ -181,11 +186,13 @@ class CsvImportManager @Inject constructor(
         )
     }
 
+    // Timestamp is part of the fingerprint so two identical foods logged at
+    // different times (e.g. two coffees in one meal) both survive a restore.
     private fun foodKey(entry: FoodEntryEntity): String =
-        "${entry.date}|${entry.mealType}|${entry.description}|${entry.calories}"
+        "${entry.date}|${entry.mealType}|${entry.description}|${entry.calories}|${entry.timestamp}"
 
     private fun weightKey(entry: WeightEntryEntity): String =
-        "${entry.date}|${entry.weightKg}"
+        "${entry.date}|${entry.weightKg}|${entry.timestamp}"
 
     private fun favKey(entry: FavoriteMealEntity): String =
         "${entry.name}|${entry.mealType}"
@@ -199,7 +206,7 @@ class CsvImportManager @Inject constructor(
                     // Reject rows with non-ISO dates here so downstream date
                     // parsing can trust everything stored in the database.
                     date = LocalDate.parse(row[1]).toString(),
-                    mealType = row[2],
+                    mealType = parseMealType(row[2]),
                     description = row[3],
                     calories = row[4].toInt(),
                     proteinGrams = row[5].toFloat(),
@@ -239,13 +246,19 @@ class CsvImportManager @Inject constructor(
                     totalProtein = row[4].toFloat(),
                     totalCarbs = row[5].toFloat(),
                     totalFat = row[6].toFloat(),
-                    itemsJson = null,
-                    mealType = row[7],
+                    itemsJson = row.getOrNull(9)?.takeIf { it.isNotBlank() },
+                    mealType = parseMealType(row[7]),
                     source = row.getOrNull(8).orEmpty().ifBlank { "AI" }
                 )
             }.getOrNull()
         }
     }
+
+    // Reject rows with unknown meal types (throws inside the row's runCatching)
+    // so unguarded MealType.valueOf() calls on read paths can't crash later;
+    // hand-edited CSVs often carry "Breakfast" instead of "BREAKFAST".
+    private fun parseMealType(raw: String): String =
+        MealType.valueOf(raw.trim().uppercase()).name
 
     // RFC 4180-style parser matching CsvExportManager.escapeCsv: fields may be
     // quoted, and literal quotes inside a quoted field are doubled.

@@ -133,14 +133,21 @@ object NetworkModule {
             while (true) {
                 try {
                     val response = chain.proceed(request)
-                    if (attempt >= 3 || !response.code.isRetryableStatus()) {
+                    if (attempt >= 3 || !isRetryable(response.code, request.method)) {
                         return@Interceptor response
                     }
 
                     response.close()
                     retryDelayBudgetMs -= sleepBeforeRetry(response.header("retry-after"), nextDelayMs, retryDelayBudgetMs)
                 } catch (e: IOException) {
-                    if (e is SocketTimeoutException || attempt >= 3 || request.body?.isOneShot() == true) {
+                    // Never retry a cancelled call, and only retry idempotent GETs on
+                    // transport errors — a POST completion may already have been billed.
+                    if (chain.call().isCanceled() ||
+                        e is SocketTimeoutException ||
+                        attempt >= 3 ||
+                        request.method != "GET" ||
+                        request.body?.isOneShot() == true
+                    ) {
                         throw e
                     }
                     retryDelayBudgetMs -= sleepBeforeRetry(
@@ -157,8 +164,11 @@ object NetworkModule {
         }
     }
 
-    private fun Int.isRetryableStatus(): Boolean {
-        return this == 429 || this == 500 || this == 503
+    private fun isRetryable(code: Int, method: String): Boolean {
+        // 429/503 mean the request was rejected before processing — safe for any
+        // method. 500 is ambiguous (a POST may have produced a billed completion),
+        // so only GETs retry on it.
+        return code == 429 || code == 503 || (code == 500 && method == "GET")
     }
 
     private fun sleepBeforeRetry(retryAfter: String?, fallbackDelayMs: Long, remainingBudgetMs: Long): Long {

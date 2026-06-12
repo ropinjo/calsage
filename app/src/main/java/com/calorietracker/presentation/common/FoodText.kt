@@ -19,11 +19,11 @@ fun String.capitalizedFoodName(): String {
     return trimmed.replaceRange(firstLetter, firstLetter + 1, trimmed[firstLetter].titlecase())
 }
 
+// AI-assumed amounts are guesses, so they are hidden entirely rather than
+// shown with the marker stripped.
 fun String.cleanAssumedAmount(): String {
     if (contains("assumed", ignoreCase = true)) return ""
-    return replace(Regex("""\s*\(?assumed\)?\s*""", RegexOption.IGNORE_CASE), " ")
-        .replace(Regex("""\s+"""), " ")
-        .trim()
+    return replace(Regex("""\s+"""), " ").trim()
 }
 
 fun String.removeFoodName(name: String): String {
