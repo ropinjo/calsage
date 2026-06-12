@@ -44,6 +44,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Brightness6
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
@@ -1183,18 +1184,13 @@ private fun AiModelPickerRow(
                     text = model.name,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f, fill = false)
+                    modifier = Modifier.weight(1f)
                 )
                 if (model.isPrivate) {
                     Spacer(modifier = Modifier.width(6.dp))
                     ModelPrivacyBadge()
                 }
             }
-            Text(
-                text = model.id,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             modelPricingLabel(model.pricing)?.let { pricingLabel ->
                 Text(
                     text = pricingLabel,
@@ -1216,18 +1212,12 @@ private fun AiModelPickerRow(
             }
         }
         if (selected) {
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = "Selected",
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Selected",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
         } else {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -1244,7 +1234,7 @@ private fun modelPricingLabel(pricing: AiModelPricing?): String? {
     if (pricing.inputPerMillion == 0f && pricing.outputPerMillion == 0f) return "Free"
     val input = formatUsdRate(pricing.inputPerMillion)
     val output = formatUsdRate(pricing.outputPerMillion)
-    return "$$input in / $$output out per 1M tokens"
+    return "$$input in / $$output out"
 }
 
 private fun formatUsdRate(value: Float): String {
