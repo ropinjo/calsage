@@ -44,7 +44,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Brightness6
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
@@ -841,31 +840,10 @@ private fun ModelSelectionSection(
                                 modifier = Modifier.weight(1f),
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = selectedModel.name,
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    val badges = traitBadges(selectedModel.traits)
-                                    if (badges.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = badges,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    if (selectedModel.isPrivate) {
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        ModelPrivacyBadge()
-                                    }
-                                }
                                 Text(
-                                    text = selectedModel.id,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = selectedModel.name,
+                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 modelPricingLabel(selectedModel.pricing)?.let { pricingLabel ->
                                     Text(
@@ -874,12 +852,25 @@ private fun ModelSelectionSection(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                if (selectedModel.supportsReasoning) {
-                                    Text(
-                                        text = "Thinking available",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
+                                if (selectedModel.supportsReasoning || selectedModel.isBeta || selectedModel.isPrivate) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        if (selectedModel.supportsReasoning) {
+                                            Text(
+                                                text = "Thinking available",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                        if (selectedModel.isBeta) {
+                                            ModelBetaBadge()
+                                        }
+                                        if (selectedModel.isPrivate) {
+                                            ModelPrivacyBadge()
+                                        }
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
@@ -1129,26 +1120,6 @@ private fun AiModelPickerDialog(
     }
 }
 
-private fun traitBadges(traits: List<String>): String {
-    val seen = mutableSetOf<String>()
-    val builder = StringBuilder()
-    for (trait in traits) {
-        val lower = trait.lowercase()
-        val badge = when {
-            lower.contains("fast") -> "⚡"
-            lower.contains("vision") -> "👁"
-            lower.contains("code") -> "⌨"
-            lower.contains("reasoning") -> "🧠"
-            else -> null
-        }
-        if (badge != null && seen.add(badge)) {
-            if (builder.isNotEmpty()) builder.append(' ')
-            builder.append(badge)
-        }
-    }
-    return builder.toString()
-}
-
 @Composable
 private fun AiModelPickerRow(
     model: AiModel,
@@ -1158,8 +1129,14 @@ private fun AiModelPickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 2.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .then(
+                if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                else Modifier
+            )
             .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 14.dp),
+            .padding(horizontal = 12.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -1188,14 +1165,6 @@ private fun AiModelPickerRow(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                if (model.isBeta) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    ModelBetaBadge()
-                }
-                if (model.isPrivate) {
-                    Spacer(modifier = Modifier.width(6.dp))
-                    ModelPrivacyBadge()
-                }
             }
             modelPricingLabel(model.pricing)?.let { pricingLabel ->
                 Text(
@@ -1209,29 +1178,33 @@ private fun AiModelPickerRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            if (model.supportsReasoning) {
-                Text(
-                    text = "Thinking available",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            if (model.supportsReasoning || model.isBeta || model.isPrivate) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (model.supportsReasoning) {
+                        Text(
+                            text = "Thinking available",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    if (model.isBeta) {
+                        ModelBetaBadge()
+                    }
+                    if (model.isPrivate) {
+                        ModelPrivacyBadge()
+                    }
+                }
             }
         }
-        if (selected) {
-            Icon(
-                imageVector = Icons.Filled.CheckCircle,
-                contentDescription = "Selected",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = if (selected) "Selected" else null,
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 
@@ -1256,10 +1229,10 @@ private fun ModelPrivacyBadge() {
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
-            text = "Private",
+            text = "P",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.primary
         )
@@ -1272,10 +1245,10 @@ private fun ModelBetaBadge() {
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(MaterialTheme.colorScheme.tertiary.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 3.dp)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
-            text = "Beta",
+            text = "B",
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.tertiary
         )
