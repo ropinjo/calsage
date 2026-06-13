@@ -87,6 +87,10 @@ class TrendsViewModel @Inject constructor(
         val startDate = baseState.selectedRange.days?.let { days ->
             LocalDate.now().minusDays((days - 1).toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
         } ?: "1970-01-01"
+        // Short fixed windows (7d, 30d) show the full range so the chart matches
+        // the selected chip; longer and open-ended ranges trim leading untracked
+        // days so they don't open with empty space from before tracking began.
+        val trimLeading = baseState.selectedRange.days?.let { it > 30 } ?: true
 
         combine(
             foodRepository.getCalorieTrend(startDate, endDate),
@@ -108,7 +112,7 @@ class TrendsViewModel @Inject constructor(
             TrendsUiState(
                 selectedTab = baseState.selectedTab,
                 selectedRange = baseState.selectedRange,
-                calorieData = fillUntrackedDays(calorieData, startDate, endDate),
+                calorieData = fillUntrackedDays(calorieData, startDate, endDate, trimLeading = trimLeading),
                 macroData = macroData,
                 calorieGoal = baseState.calorieGoal,
                 weightData = weightData,
@@ -133,19 +137,25 @@ class TrendsViewModel @Inject constructor(
 
 /**
  * Expands sparse per-day totals into a continuous day series so untracked days
- * appear as gaps instead of being silently skipped. The series starts at the
- * first tracked day in range (not the range start) so charts don't lead with
- * empty space from before the user began tracking.
+ * appear as gaps instead of being silently skipped. When [trimLeading] is set
+ * the series starts at the first tracked day in range (not the range start) so
+ * long charts don't lead with empty space from before the user began tracking;
+ * otherwise it spans the full range so short fixed windows match their chip.
  */
 internal fun fillUntrackedDays(
     data: List<DailyCalorie>,
     startDate: String,
-    endDate: String
+    endDate: String,
+    trimLeading: Boolean
 ): List<DailyCaloriePoint> {
     if (data.isEmpty()) return emptyList()
     val byDate = data.associateBy { it.date }
-    val firstTracked = LocalDate.parse(data.minOf { it.date })
-    var current = maxOf(LocalDate.parse(startDate), firstTracked)
+    val rangeStart = LocalDate.parse(startDate)
+    var current = if (trimLeading) {
+        maxOf(rangeStart, LocalDate.parse(data.minOf { it.date }))
+    } else {
+        rangeStart
+    }
     val end = LocalDate.parse(endDate)
     val result = mutableListOf<DailyCaloriePoint>()
     while (current <= end) {

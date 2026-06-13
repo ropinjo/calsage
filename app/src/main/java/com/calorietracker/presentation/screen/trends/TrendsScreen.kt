@@ -272,7 +272,12 @@ private fun CalorieBarChart(
         (buckets.maxOfOrNull { it.calories } ?: goalLine).coerceAtLeast(goalLine).toFloat() * 1.15f
     }
     val showValueLabels = buckets.size <= CHART_MAX_VALUE_LABELS
-    val xAxisLabelIndices = remember(buckets) { selectAxisLabelIndices(buckets.size, maxLabels = 4) }
+    // Daily bars get one label per day (up to a week's worth) so a 7d view never
+    // looks like it is missing dates; the denser weekly view stays capped so
+    // labels don't collide.
+    val xAxisLabelIndices = remember(buckets, isWeekly) {
+        selectAxisLabelIndices(buckets.size, maxLabels = if (isWeekly) 4 else 7)
+    }
     var selectedIndex by remember(buckets) { mutableStateOf<Int?>(null) }
     var canvasWidth by remember { mutableStateOf(0) }
 
@@ -718,8 +723,12 @@ private fun selectAxisLabelIndices(count: Int, maxLabels: Int): Set<Int> {
     if (count <= 0) return emptySet()
     if (count <= maxLabels) return (0 until count).toSet()
 
-    val step = (count - 1).toFloat() / (maxLabels - 1).coerceAtLeast(1)
-    return (0 until maxLabels)
+    // Cap the label budget so the evenly spaced indices are never adjacent;
+    // otherwise rounding lands two labels on neighbouring bars while skipping
+    // others (e.g. 6 bars, max 4 -> 0, 2, 3, 5 with 10 & 11 Jun touching).
+    val labels = minOf(maxLabels, (count + 1) / 2)
+    val step = (count - 1).toFloat() / (labels - 1).coerceAtLeast(1)
+    return (0 until labels)
         .map { index -> (index * step).roundToInt().coerceIn(0, count - 1) }
         .toSet()
 }
