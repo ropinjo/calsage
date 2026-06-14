@@ -61,6 +61,8 @@ import com.calorietracker.domain.model.WeightEntry
 import com.calorietracker.presentation.common.components.AddFab
 import com.calorietracker.presentation.common.components.LogWeightSheet
 import com.calorietracker.presentation.common.components.WeightHistoryChart
+import com.calorietracker.presentation.theme.MotionDurations
+import kotlinx.coroutines.delay
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -84,7 +86,10 @@ fun WeightScreen(
         viewModel.events.collect { event ->
             when (event) {
                 WeightEvent.WeightLogged -> {
+                    // Haptic is the instant feedback; let the toast land after the sheet has
+                    // slid away so it doesn't overlap the closing sheet.
                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                    delay(MotionDurations.STANDARD.toLong())
                     Toast.makeText(context, "Weight logged", Toast.LENGTH_SHORT).show()
                 }
             }

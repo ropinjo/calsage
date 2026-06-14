@@ -22,7 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -54,6 +57,8 @@ fun LogWeightSheet(
     val keyboardController = LocalSoftwareKeyboardController.current
     val weightFocusRequester = remember { FocusRequester() }
     val canSubmit = (weightInput.replace(',', '.').toFloatOrNull() ?: 0f) > 0f
+    // One-time lock so an optimistic submit can't fire twice while the sheet animates out.
+    var submitted by remember { mutableStateOf(false) }
 
     // Wait until the sheet has settled before requesting focus, so the keyboard
     // rises after the enter animation finishes instead of fighting it.
@@ -119,18 +124,23 @@ fun LogWeightSheet(
             PrimaryButton(
                 text = "Log Weight",
                 onClick = {
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                    coroutineScope.launch {
-                        sheetState.hide()
+                    if (!submitted) {
+                        submitted = true
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                        // Save immediately (optimistic) so the haptic/toast fire on tap,
+                        // then let the sheet slide away in parallel.
                         onConfirm()
-                        onDismissRequest()
+                        coroutineScope.launch { sheetState.hide() }
+                            .invokeOnCompletion {
+                                if (!sheetState.isVisible) onDismissRequest()
+                            }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp),
-                enabled = canSubmit
+                enabled = canSubmit && !submitted
             )
         }
     }

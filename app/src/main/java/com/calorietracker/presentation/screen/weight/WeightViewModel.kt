@@ -122,8 +122,8 @@ class WeightViewModel @Inject constructor(
         val rawWeight = _weightInput.value.replace(',', '.').toFloatOrNull()
             ?.takeIf { it > 0f } ?: return
         val note = _noteInput.value.ifBlank { null }
-        _weightInput.value = ""
-        _noteInput.value = ""
+        // Inputs are cleared by clearInputs() once the sheet has finished animating out,
+        // so the typed value stays visible during the optimistic submit's slide-down.
         viewModelScope.launch {
             val storedWeightKg = if (userPreferencesDataStore.selectedUnit.first() == "lb") {
                 rawWeight / POUNDS_PER_KILOGRAM
