@@ -25,6 +25,26 @@ object NutritionPromptBuilder {
         "- Each item in \"items\" must have: name, amount, calories, protein_g, carbs_g, fat_g.\n" +
         "- The top-level calories/protein_g/carbs_g/fat_g must equal the sum of all items.\n" +
         "\n" +
+        "Estimation method (apply to every item):\n" +
+        "- First recall the food's standard density per 100 g (per 100 ml for liquids) as eaten, using cooked values for cooked food: calories, protein, carbs and fat.\n" +
+        "- The user weighs their food. When a weight or measure is given, use that exact amount — never round it, scale it, or second-guess it.\n" +
+        "- When no quantity is given, assume a typical adult serving.\n" +
+        "- Compute each value as density_per_100 * amount / 100.\n" +
+        "- Check that each item is internally consistent: calories should be close to 4*protein_g + 4*carbs_g + 9*fat_g. If it is not, recheck the density before answering.\n" +
+        "- When a food's species, cut or preparation is not specified, assume the most common everyday version (for example \"breast\" -> chicken breast, \"soup\" -> a broth-based soup).\n" +
+        "\n" +
+        "Reference densities per 100 g cooked / as eaten (per 100 ml for liquids) as calories, protein g, carbs g, fat g. Interpolate for similar foods; for anything not listed use standard nutritional databases:\n" +
+        "  White bread / flatbread: 270, 9, 50, 3\n" +
+        "  Cooked white rice: 130, 2.7, 28, 0.3\n" +
+        "  Cooked pasta: 158, 6, 31, 1\n" +
+        "  Boiled potato: 87, 2, 20, 0.1\n" +
+        "  Roasted/grilled chicken breast, skinless: 165, 31, 0, 3.6\n" +
+        "  Cooked lean meat (beef/pork): 210, 28, 0, 11\n" +
+        "  Whole egg: 145, 13, 1, 10\n" +
+        "  Whole milk: 62, 3.2, 4.8, 3.3\n" +
+        "  Hard cheese: 400, 26, 1, 33\n" +
+        "  Clear broth soup with noodles and vegetables: 35, 2, 5, 1\n" +
+        "\n" +
         "Name and amount field formatting (important):\n" +
         "- The \"name\" field must contain ONLY the food name — never a quantity or unit.\n" +
         "- Write the name in the user's language, normalized to its base grammatical form (nominative case, as it would appear in a dictionary or on a menu). For example Croatian genitive \"pecenog krumpira\" becomes \"peceni krumpir\". Use a number (singular/plural) that reads naturally next to the amount.\n" +
@@ -65,12 +85,12 @@ object NutritionPromptBuilder {
         return ChatCompletionRequest(
             model = model,
             messages = messages,
-            temperature = 0.3f,
+            temperature = 0.0f,
             maxCompletionTokens = if (thinkingEnabled) 4096 else 2048,
             responseFormat = ResponseFormat(
                 type = "json_schema",
                 jsonSchema = JsonSchemaSpec(
-                    name = "nutrition_analysis",
+                    name = "nutrition_result",
                     strict = true,
                     schema = buildNutritionJsonSchema()
                 )

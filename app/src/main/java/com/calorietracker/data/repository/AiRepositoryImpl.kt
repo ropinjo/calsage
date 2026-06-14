@@ -13,9 +13,7 @@ import com.calorietracker.data.remote.ai.venice.VeniceRateLimitException
 import com.calorietracker.data.remote.ai.venice.dto.ChatCompletionRequest
 import com.calorietracker.data.remote.ai.venice.dto.ChatCompletionResponse
 import com.calorietracker.data.remote.ai.venice.dto.ChatMessage
-import com.calorietracker.data.remote.ai.venice.dto.JsonSchemaSpec
 import com.calorietracker.data.remote.ai.venice.dto.ModelInfo
-import com.calorietracker.data.remote.ai.venice.dto.ResponseFormat
 import com.calorietracker.data.remote.ai.venice.dto.Usage
 import com.calorietracker.data.remote.ai.venice.dto.VeniceParameters
 import com.calorietracker.domain.model.NutritionInfo
@@ -23,8 +21,11 @@ import com.calorietracker.domain.repository.AiModel
 import com.calorietracker.domain.repository.AiModelExtendedPricing
 import com.calorietracker.domain.repository.AiModelPricing
 import com.calorietracker.domain.repository.AiRepository
+import com.calorietracker.di.ApplicationScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -47,7 +48,8 @@ class AiRepositoryImpl @Inject constructor(
     private val secureStorage: SecureStorage,
     private val nutritionCache: NutritionCache,
     private val apiKeyHolder: ApiKeyHolder,
-    private val json: Json
+    private val json: Json,
+    @param:ApplicationScope private val externalScope: CoroutineScope
 ) : AiRepository {
 
     override suspend fun analyzeFood(description: String): Result<NutritionInfo> {
@@ -67,30 +69,13 @@ class AiRepositoryImpl @Inject constructor(
             val cached = nutritionCache.get(cacheKey)
             if (cached != null) return Result.success(cached)
 
-            // 3. Build request
-            val systemMessages = NutritionPromptBuilder.buildSystemMessages(customPrompt)
-            val allMessages = systemMessages + ChatMessage(role = "user", content = description)
-
-            val veniceParams = VeniceParameters(
-                disableThinking = !config.thinkingEnabled,
-                stripThinkingResponse = true,
-                includeVeniceSystemPrompt = false
-            )
-
-            val request = ChatCompletionRequest(
+            // 3. Build request — single source of truth in NutritionPromptBuilder
+            // so request settings (temperature, token budget, schema) can't drift.
+            val request = NutritionPromptBuilder.buildNutritionRequest(
+                description = description,
+                userPrompt = customPrompt,
                 model = config.model,
-                messages = allMessages,
-                temperature = 0.3f,
-                maxCompletionTokens = if (config.thinkingEnabled) 4096 else 2048,
-                responseFormat = ResponseFormat(
-                    type = "json_schema",
-                    jsonSchema = JsonSchemaSpec(
-                        name = "nutrition_result",
-                        strict = true,
-                        schema = NutritionPromptBuilder.getNutritionJsonSchema()
-                    )
-                ),
-                veniceParameters = veniceParams
+                thinkingEnabled = config.thinkingEnabled
             )
 
             // 4. Call API
@@ -129,17 +114,23 @@ class AiRepositoryImpl @Inject constructor(
             // 6. Cache
             nutritionCache.put(cacheKey, nutritionInfo)
 
-            // 7. Track usage and cost
-            val modelPricing = resolveModelPricing(config.model, response.model)
-            val requestCost = calculateRequestCost(
-                response.usage,
-                modelPricing
-            )
-            userPreferencesDataStore.addTokenUsage(
-                inputTokens = response.usage.promptTokens.toLong(),
-                outputTokens = response.usage.completionTokens.toLong(),
-                cost = requestCost
-            )
+            // 7. Track usage and cost off the hot path. Resolving pricing can trigger
+            // a models fetch (network) the first time, which must not delay returning
+            // the result to the user; the figures are bookkeeping, not part of the answer.
+            externalScope.launch {
+                runCatching {
+                    val modelPricing = resolveModelPricing(config.model, response.model)
+                    val requestCost = calculateRequestCost(
+                        response.usage,
+                        modelPricing
+                    )
+                    userPreferencesDataStore.addTokenUsage(
+                        inputTokens = response.usage.promptTokens.toLong(),
+                        outputTokens = response.usage.completionTokens.toLong(),
+                        cost = requestCost
+                    )
+                }
+            }
 
             Result.success(nutritionInfo)
 

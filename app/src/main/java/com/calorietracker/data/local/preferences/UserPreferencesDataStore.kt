@@ -46,7 +46,7 @@ class UserPreferencesDataStore @Inject constructor(
     companion object {
         const val DEFAULT_MODEL = "most_intelligent"
         const val DEFAULT_CUSTOM_PROMPT =
-            "I'm tracking my daily nutrition and usually eat home-cooked meals. When amounts are missing, estimate realistic adult portions. Prefer slightly higher calorie estimates over lower ones."
+            "I'm tracking my daily nutrition and usually eat home-cooked meals. I weigh my food, so use the exact amounts I give. When amounts are missing, estimate realistic adult portions. Aim for accurate, unbiased estimates — do not systematically over- or under-estimate."
     }
 
     // ---- Flow getters ----
