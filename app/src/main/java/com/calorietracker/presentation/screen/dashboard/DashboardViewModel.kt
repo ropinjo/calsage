@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -29,6 +30,16 @@ class DashboardViewModel @Inject constructor(
 
     private val today: String
         get() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    init {
+        viewModelScope.launch {
+            val savedDate = userPreferences.selectedDate.first() ?: return@launch
+            val currentDate = LocalDate.now()
+            if (LocalDate.parse(savedDate, DateTimeFormatter.ISO_LOCAL_DATE).isBefore(currentDate)) {
+                userPreferences.setSelectedDate(currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE))
+            }
+        }
+    }
 
     val selectedDate: StateFlow<String> = userPreferences.selectedDate
         .map { it ?: today }
