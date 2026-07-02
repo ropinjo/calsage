@@ -16,6 +16,7 @@ local.properties
 Thumbs.db
 
 # Assistant/local planning files
+AGENTS.md
 .agents/
 .claude/
 .codex
