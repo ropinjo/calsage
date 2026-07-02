@@ -42,12 +42,14 @@ class MealDetailViewModel @Inject constructor(
     private val _editingIds = MutableStateFlow<Set<Long>>(emptySet())
 
     private var lastDeletedEntry: FoodEntry? = null
+    private var currentEntries: List<FoodEntry> = emptyList()
 
     val uiState: StateFlow<MealDetailUiState> = routeArgs
         .flatMapLatest { args ->
             foodRepository
                 .getEntriesForMeal(args.date, MealType.valueOf(args.mealType.uppercase()))
                 .combine(_editingIds) { entries, editingIds ->
+                    currentEntries = entries
                     if (entries.isEmpty()) {
                         MealDetailUiState.Empty
                     } else {
@@ -96,26 +98,10 @@ class MealDetailViewModel @Inject constructor(
         viewModelScope.launch {
             val args = routeArgs.value
             // Store for undo before deleting
-            val state = uiState.value
-            if (state is MealDetailUiState.Success) {
-                val entry = state.entries.find { it.id == id }
-                if (entry != null) {
-                    lastDeletedEntry = FoodEntry(
-                        id = entry.id,
-                        date = args.date,
-                        mealType = MealType.valueOf(args.mealType),
-                        description = entry.description,
-                        nutritionInfo = NutritionInfo(
-                            calories = entry.calories,
-                            proteinGrams = entry.protein,
-                            carbsGrams = entry.carbs,
-                            fatGrams = entry.fat
-                        ),
-                        timestamp = System.currentTimeMillis(),
-                        source = entry.source
-                    )
-                }
-            }
+            lastDeletedEntry = currentEntries.find { it.id == id }?.copy(
+                date = args.date,
+                mealType = MealType.valueOf(args.mealType)
+            )
             foodRepository.deleteEntry(id)
             _events.emit(MealDetailEvent.EntryDeleted)
         }
@@ -143,6 +129,7 @@ class MealDetailViewModel @Inject constructor(
     fun updateEntry(entry: MealDetailEntry) {
         viewModelScope.launch {
             val args = routeArgs.value
+            val existing = currentEntries.find { it.id == entry.id } ?: return@launch
             foodRepository.updateEntry(
                 FoodEntry(
                     id = entry.id,
@@ -155,7 +142,7 @@ class MealDetailViewModel @Inject constructor(
                         carbsGrams = entry.carbs,
                         fatGrams = entry.fat
                     ),
-                    timestamp = System.currentTimeMillis(),
+                    timestamp = existing.timestamp,
                     source = entry.source
                 )
             )

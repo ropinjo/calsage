@@ -4,6 +4,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 class NutritionPromptBuilderTest {
@@ -65,5 +66,24 @@ class NutritionPromptBuilderTest {
             .map { it.jsonPrimitive.content }
 
         assertEquals(listOf("string", "null"), errorTypes)
+    }
+
+    @Test
+    fun `item schema includes portion basis fields`() {
+        val schema = NutritionPromptBuilder.getNutritionJsonSchema()
+        val itemSchema = schema["properties"]!!
+            .jsonObject["items"]!!
+            .jsonObject["items"]!!
+            .jsonObject
+        val itemProperties = itemSchema["properties"]!!
+            .jsonObject
+        val required = itemSchema["required"]!!
+            .jsonArray
+            .map { it.jsonPrimitive.content }
+
+        assertNotNull(itemProperties["grams"])
+        assertNotNull(itemProperties["per_100g"])
+        assertEquals(true, required.contains("grams"))
+        assertEquals(true, required.contains("per_100g"))
     }
 }

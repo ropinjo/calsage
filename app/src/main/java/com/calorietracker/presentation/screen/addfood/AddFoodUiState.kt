@@ -1,6 +1,7 @@
 package com.calorietracker.presentation.screen.addfood
 
 import com.calorietracker.domain.model.FoodSource
+import com.calorietracker.domain.model.NutritionPer100g
 
 sealed interface AddFoodUiState {
     data object Idle : AddFoodUiState
@@ -63,5 +64,8 @@ data class FoodItemResult(
     val proteinGrams: Float,
     val carbsGrams: Float,
     val fatGrams: Float,
+    val grams: Float? = null,
+    val per100g: NutritionPer100g? = null,
+    val caloriesRecomputed: Boolean = false,
     val isEditing: Boolean = false
 )

@@ -39,7 +39,7 @@ class OpenFoodFactsBarcodeRepositoryTest {
         assertTrue(result is BarcodeLookupResult.Found)
         result as BarcodeLookupResult.Found
         assertEquals("Activia Natural Yogurt", result.productName)
-        assertEquals(92, result.nutritionPer100g.calories)
+        assertEquals(92f, result.nutritionPer100g.calories, 0.001f)
         assertEquals(3.8f, result.nutritionPer100g.proteinGrams, 0.001f)
         assertEquals("125g", result.servingSize)
     }
@@ -98,7 +98,30 @@ class OpenFoodFactsBarcodeRepositoryTest {
 
         assertTrue(result is BarcodeLookupResult.Found)
         result as BarcodeLookupResult.Found
-        assertEquals(100, result.nutritionPer100g.calories)
+        assertEquals(100f, result.nutritionPer100g.calories, 0.001f)
+    }
+
+    @Test
+    fun `keeps decimal kcal per 100g for serving scaling`() = runTest {
+        val repository = OpenFoodFactsBarcodeRepository(
+            apiService = FakeOpenFoodFactsApiService {
+                OpenFoodFactsResponse(
+                    status = 1,
+                    product = OpenFoodFactsResponse.Product(
+                        name = "Yogurt",
+                        nutriments = OpenFoodFactsResponse.Nutriments(
+                            kcalPer100g = 92.5f
+                        )
+                    )
+                )
+            }
+        )
+
+        val result = repository.getProduct("223")
+
+        assertTrue(result is BarcodeLookupResult.Found)
+        result as BarcodeLookupResult.Found
+        assertEquals(92.5f, result.nutritionPer100g.calories, 0.001f)
     }
 
     @Test
@@ -160,7 +183,7 @@ class OpenFoodFactsBarcodeRepositoryTest {
 
         assertTrue(result is BarcodeLookupResult.Found)
         result as BarcodeLookupResult.Found
-        assertEquals(0, result.nutritionPer100g.calories)
+        assertEquals(0f, result.nutritionPer100g.calories, 0.001f)
     }
 
     @Test

@@ -35,6 +35,7 @@ object DatabaseModule {
             AppDatabase::class.java,
             "calsage_database"
         )
+            // Any database version bump must add a Migration here; user data must survive upgrades.
             .build()
     }
 

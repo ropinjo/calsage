@@ -15,5 +15,15 @@ data class NutritionItem(
     val calories: Int,
     val proteinGrams: Float,
     val carbsGrams: Float,
+    val fatGrams: Float,
+    val grams: Float? = null,
+    val per100g: NutritionPer100g? = null,
+    val caloriesRecomputed: Boolean = false
+)
+
+data class NutritionPer100g(
+    val calories: Float,
+    val proteinGrams: Float,
+    val carbsGrams: Float,
     val fatGrams: Float
 )

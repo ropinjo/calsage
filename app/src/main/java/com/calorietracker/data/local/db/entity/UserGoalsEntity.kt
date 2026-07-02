@@ -16,10 +16,10 @@ data class UserGoalsEntity(
     val proteinTargetGrams: Float = 150f,
 
     @ColumnInfo(name = "carbs_target_grams", defaultValue = "250")
-    val carbsTargetGrams: Float = 200f,
+    val carbsTargetGrams: Float = 250f,
 
     @ColumnInfo(name = "fat_target_grams", defaultValue = "65")
-    val fatTargetGrams: Float = 67f,
+    val fatTargetGrams: Float = 65f,
 
     @ColumnInfo(name = "target_weight_kg")
     val targetWeightKg: Float? = null

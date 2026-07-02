@@ -6,6 +6,7 @@ import com.calorietracker.domain.model.FavoriteMeal
 import com.calorietracker.domain.model.FoodSource
 import com.calorietracker.domain.model.MealType
 import com.calorietracker.domain.model.NutritionItem
+import com.calorietracker.domain.model.NutritionPer100g
 import com.calorietracker.domain.repository.FavoriteRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -110,6 +111,17 @@ private data class SerializableItem(
     val calories: Int,
     val protein_g: Float,
     val carbs_g: Float,
+    val fat_g: Float,
+    val grams: Float? = null,
+    val per_100g: SerializablePer100g? = null,
+    val calories_recomputed: Boolean = false
+)
+
+@Serializable
+private data class SerializablePer100g(
+    val calories: Float,
+    val protein_g: Float,
+    val carbs_g: Float,
     val fat_g: Float
 )
 
@@ -120,7 +132,17 @@ private fun SerializableItem.toDomain(): NutritionItem {
         calories = calories,
         proteinGrams = protein_g,
         carbsGrams = carbs_g,
-        fatGrams = fat_g
+        fatGrams = fat_g,
+        grams = grams,
+        per100g = per_100g?.let {
+            NutritionPer100g(
+                calories = it.calories,
+                proteinGrams = it.protein_g,
+                carbsGrams = it.carbs_g,
+                fatGrams = it.fat_g
+            )
+        },
+        caloriesRecomputed = calories_recomputed
     )
 }
 
@@ -131,6 +153,16 @@ private fun NutritionItem.toSerializable(): SerializableItem {
         calories = calories,
         protein_g = proteinGrams,
         carbs_g = carbsGrams,
-        fat_g = fatGrams
+        fat_g = fatGrams,
+        grams = grams,
+        per_100g = per100g?.let {
+            SerializablePer100g(
+                calories = it.calories,
+                protein_g = it.proteinGrams,
+                carbs_g = it.carbsGrams,
+                fat_g = it.fatGrams
+            )
+        },
+        calories_recomputed = caloriesRecomputed
     )
 }

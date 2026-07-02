@@ -1,11 +1,9 @@
 package com.calorietracker.domain.repository
 
-import com.calorietracker.domain.model.NutritionInfo
-
 sealed interface BarcodeLookupResult {
     data class Found(
         val productName: String,
-        val nutritionPer100g: NutritionInfo,
+        val nutritionPer100g: BarcodeNutritionPer100g,
         val servingSize: String?
     ) : BarcodeLookupResult
 
@@ -20,3 +18,10 @@ interface BarcodeRepository {
 
     suspend fun getProduct(barcode: String): BarcodeLookupResult
 }
+
+data class BarcodeNutritionPer100g(
+    val calories: Float,
+    val proteinGrams: Float,
+    val carbsGrams: Float,
+    val fatGrams: Float
+)

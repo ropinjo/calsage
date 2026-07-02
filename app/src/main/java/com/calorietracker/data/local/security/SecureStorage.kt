@@ -16,6 +16,12 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
+sealed interface SecretReadResult {
+    data class Success(val value: String) : SecretReadResult
+    data object Missing : SecretReadResult
+    data class Failure(val error: Throwable) : SecretReadResult
+}
+
 /**
  * Secure storage backed by the Android Keystore for AES-256-GCM encryption.
  *
@@ -68,13 +74,9 @@ class SecureStorage @Inject constructor(
         sharedPreferences.edit().putString(key, encoded).apply()
     }
 
-    /**
-     * Retrieves and decrypts a previously stored secret. Returns null if the
-     * key does not exist or decryption fails.
-     */
-    suspend fun getSecret(key: String): String? = withContext(Dispatchers.IO) {
-        val encoded = sharedPreferences.getString(key, null) ?: return@withContext null
-
+    suspend fun readSecret(key: String): SecretReadResult = withContext(Dispatchers.IO) {
+        val encoded = sharedPreferences.getString(key, null)
+            ?: return@withContext SecretReadResult.Missing
         try {
             val blob = Base64.decode(encoded, Base64.NO_WRAP)
             val ivLength = blob[0].toInt() and 0xFF
@@ -85,9 +87,17 @@ class SecureStorage @Inject constructor(
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv))
 
-            String(cipher.doFinal(ciphertext), Charsets.UTF_8)
+            SecretReadResult.Success(String(cipher.doFinal(ciphertext), Charsets.UTF_8))
         } catch (e: Exception) {
-            null
+            SecretReadResult.Failure(e)
+        }
+    }
+
+    suspend fun getSecret(key: String): String? {
+        return when (val result = readSecret(key)) {
+            is SecretReadResult.Success -> result.value
+            SecretReadResult.Missing,
+            is SecretReadResult.Failure -> null
         }
     }
 
@@ -135,6 +145,8 @@ class SecureStorage @Inject constructor(
     // --- API Key convenience methods ---
 
     suspend fun getApiKey(): String? = getSecret(API_KEY_SECRET)
+
+    suspend fun readApiKey(): SecretReadResult = readSecret(API_KEY_SECRET)
 
     suspend fun saveApiKey(key: String) = saveSecret(API_KEY_SECRET, key)
 

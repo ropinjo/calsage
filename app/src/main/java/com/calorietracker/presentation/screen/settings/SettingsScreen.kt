@@ -273,6 +273,13 @@ fun SettingsScreen(
                             }
                         }
                     } else {
+                        if (uiState.apiKeyReadFailed) {
+                            Text(
+                                "Saved API key can't be read. Re-enter it to continue.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                         OutlinedTextField(
                             value = apiKeyInput,
                             onValueChange = viewModel::updateApiKeyInput,

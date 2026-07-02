@@ -80,7 +80,7 @@ class CsvExportManager @Inject constructor(
                         "${entry.id}," +
                         "${escapeCsv(entry.date)}," +
                         "${escapeCsv(entry.mealType)}," +
-                        "${escapeCsv(entry.description)}," +
+                        "${escapeFreeTextCsv(entry.description)}," +
                         "${entry.calories}," +
                         "${entry.proteinGrams}," +
                         "${entry.carbsGrams}," +
@@ -99,7 +99,7 @@ class CsvExportManager @Inject constructor(
                         "${entry.id}," +
                         "${escapeCsv(entry.date)}," +
                         "${entry.weightKg}," +
-                        "${escapeCsv(entry.note ?: "")}," +
+                        "${escapeFreeTextCsv(entry.note ?: "")}," +
                         "${entry.timestamp}"
                     )
                 }
@@ -131,8 +131,8 @@ class CsvExportManager @Inject constructor(
                 for (fav in favorites) {
                     writer.writeLine(
                         "${fav.id}," +
-                        "${escapeCsv(fav.name)}," +
-                        "${escapeCsv(fav.description)}," +
+                        "${escapeFreeTextCsv(fav.name)}," +
+                        "${escapeFreeTextCsv(fav.description)}," +
                         "${fav.totalCalories}," +
                         "${fav.totalProtein}," +
                         "${fav.totalCarbs}," +
@@ -177,5 +177,26 @@ class CsvExportManager @Inject constructor(
         } else {
             value
         }
+    }
+
+    private fun escapeFreeTextCsv(value: String): String {
+        return escapeCsv(value.neutralizeCsvFormulaCell())
+    }
+}
+
+internal val CSV_FORMULA_PREFIXES = setOf('=', '+', '-', '@', '\t', '\r')
+
+internal fun String.neutralizeCsvFormulaCell(): String {
+    if (isEmpty()) return this
+    val dangerous = this[0] in CSV_FORMULA_PREFIXES
+    val guardedDangerous = length > 1 && this[0] == '\'' && this[1] in CSV_FORMULA_PREFIXES
+    return if (dangerous || guardedDangerous) "'$this" else this
+}
+
+internal fun String.stripCsvFormulaGuard(): String {
+    return when {
+        length >= 2 && this[0] == '\'' && this[1] in CSV_FORMULA_PREFIXES -> drop(1)
+        length >= 3 && this.startsWith("''") && this[2] in CSV_FORMULA_PREFIXES -> drop(1)
+        else -> this
     }
 }

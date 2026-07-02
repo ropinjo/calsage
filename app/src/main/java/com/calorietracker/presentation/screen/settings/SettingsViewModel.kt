@@ -11,6 +11,7 @@ import com.calorietracker.data.export.ImportResult
 import com.calorietracker.data.local.db.AppDatabase
 import com.calorietracker.data.local.preferences.UserPreferencesDataStore
 import com.calorietracker.data.local.security.SecureStorage
+import com.calorietracker.data.local.security.SecretReadResult
 import com.calorietracker.domain.repository.AiModel
 import com.calorietracker.domain.repository.AiRepository
 import com.calorietracker.domain.repository.GoalsRepository
@@ -35,6 +36,7 @@ import javax.inject.Inject
 data class SettingsUiState(
     val hasApiKey: Boolean = false,
     val maskedApiKey: String = "",
+    val apiKeyReadFailed: Boolean = false,
     val selectedModel: String? = null,
     val availableModels: List<AiModel> = emptyList(),
     val selectedModelSupportsThinking: Boolean = false,
@@ -44,8 +46,8 @@ data class SettingsUiState(
     val customPrompt: String? = null,
     val calorieTarget: Int = 2000,
     val proteinTarget: Float = 150f,
-    val carbsTarget: Float = 200f,
-    val fatTarget: Float = 67f,
+    val carbsTarget: Float = 250f,
+    val fatTarget: Float = 65f,
     val selectedUnit: String = "kg",
     val inputTokens: Long = 0L,
     val outputTokens: Long = 0L,
@@ -104,12 +106,17 @@ class SettingsViewModel @Inject constructor(
     val showClearDataDialog: StateFlow<Boolean> = _showClearDataDialog.asStateFlow()
 
     private val _storedApiKey = MutableStateFlow<String?>(null)
+    private val _apiKeyReadFailed = MutableStateFlow(false)
     private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
     private val _isLoadingModels = MutableStateFlow(false)
     private val _modelLoadError = MutableStateFlow<String?>(null)
     private val _isSavingApiKey = MutableStateFlow(false)
-    private val apiKeyState = combine(_storedApiKey, _isSavingApiKey) { storedApiKey, isSavingApiKey ->
-        storedApiKey to isSavingApiKey
+    private val apiKeyState = combine(
+        _storedApiKey,
+        _isSavingApiKey,
+        _apiKeyReadFailed
+    ) { storedApiKey, isSavingApiKey, apiKeyReadFailed ->
+        Triple(storedApiKey, isSavingApiKey, apiKeyReadFailed)
     }
 
     private val preferenceState = combine(
@@ -183,6 +190,7 @@ class SettingsViewModel @Inject constructor(
         val goals = usage.second
         val storedApiKey = apiKey.first
         val isSavingApiKey = apiKey.second
+        val apiKeyReadFailed = apiKey.third
 
         val hasKey = !storedApiKey.isNullOrBlank()
         val masked = if (!storedApiKey.isNullOrBlank() && storedApiKey.length > 8) {
@@ -196,6 +204,7 @@ class SettingsViewModel @Inject constructor(
         SettingsUiState(
             hasApiKey = hasKey,
             maskedApiKey = masked,
+            apiKeyReadFailed = apiKeyReadFailed,
             selectedModel = preferences.selectedModel,
             availableModels = availableModels,
             selectedModelSupportsThinking = supportsThinking(
@@ -230,10 +239,22 @@ class SettingsViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            val apiKey = secureStorage.getApiKey()
-            _storedApiKey.value = apiKey
-            if (!apiKey.isNullOrBlank()) {
-                refreshModels()
+            when (val result = secureStorage.readApiKey()) {
+                is SecretReadResult.Success -> {
+                    _storedApiKey.value = result.value
+                    _apiKeyReadFailed.value = false
+                    if (result.value.isNotBlank()) {
+                        refreshModels()
+                    }
+                }
+                SecretReadResult.Missing -> {
+                    _storedApiKey.value = null
+                    _apiKeyReadFailed.value = false
+                }
+                is SecretReadResult.Failure -> {
+                    _storedApiKey.value = null
+                    _apiKeyReadFailed.value = true
+                }
             }
         }
     }
@@ -253,6 +274,7 @@ class SettingsViewModel @Inject constructor(
                     if (isValid) {
                         secureStorage.saveApiKey(key)
                         _storedApiKey.value = key
+                        _apiKeyReadFailed.value = false
                         _apiKeyInput.value = ""
                         _events.emit(SettingsEvent.ApiKeySaved)
                         refreshModels()
@@ -275,6 +297,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             secureStorage.clearApiKey()
             _storedApiKey.value = null
+            _apiKeyReadFailed.value = false
             _apiKeyInput.value = ""
             _availableModels.value = emptyList()
             _isLoadingModels.value = false
@@ -421,6 +444,7 @@ class SettingsViewModel @Inject constructor(
                 secureStorage.clearAll()
             }
             _storedApiKey.value = null
+            _apiKeyReadFailed.value = false
             _availableModels.value = emptyList()
             _isLoadingModels.value = false
             _modelLoadError.value = null

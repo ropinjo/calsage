@@ -101,7 +101,7 @@ class WeightViewModel @Inject constructor(
         val recent = sorted.lastOrNull() ?: return null
         val older = sorted.filter {
             LocalDate.parse(it.date, DateTimeFormatter.ISO_LOCAL_DATE) <= cutoff
-        }.lastOrNull() ?: sorted.firstOrNull() ?: return null
+        }.lastOrNull() ?: return null
         if (recent.date == older.date) return null
         return recent.weightKg - older.weightKg
     }

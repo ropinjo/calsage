@@ -9,8 +9,10 @@ import com.calorietracker.domain.model.FoodSource
 import com.calorietracker.domain.model.MealType
 import com.calorietracker.domain.model.NutritionInfo
 import com.calorietracker.domain.model.NutritionItem
+import com.calorietracker.domain.model.NutritionPer100g
 import com.calorietracker.domain.repository.AiModel
 import com.calorietracker.domain.repository.AiRepository
+import com.calorietracker.domain.repository.BarcodeNutritionPer100g
 import com.calorietracker.domain.repository.BarcodeLookupResult
 import com.calorietracker.domain.repository.BarcodeRepository
 import com.calorietracker.domain.repository.DailyCalorie
@@ -73,8 +75,8 @@ class AddFoodViewModelTest {
         val barcodeRepository = FakeBarcodeRepository(
             result = BarcodeLookupResult.Found(
                 productName = "Activia Yogurt",
-                nutritionPer100g = NutritionInfo(
-                    calories = 92,
+                nutritionPer100g = BarcodeNutritionPer100g(
+                    calories = 92f,
                     proteinGrams = 3.8f,
                     carbsGrams = 12.5f,
                     fatGrams = 3.1f
@@ -151,8 +153,8 @@ class AddFoodViewModelTest {
         val barcodeRepository = FakeBarcodeRepository(
             result = BarcodeLookupResult.Found(
                 productName = "Activia Yogurt",
-                nutritionPer100g = NutritionInfo(
-                    calories = 92,
+                nutritionPer100g = BarcodeNutritionPer100g(
+                    calories = 92f,
                     proteinGrams = 3.8f,
                     carbsGrams = 12.5f,
                     fatGrams = 3.1f
@@ -184,6 +186,78 @@ class AddFoodViewModelTest {
     }
 
     @Test
+    fun `barcode serving prefill handles multiplicative serving sizes`() = runTest {
+        val viewModel = createViewModel(
+            barcodeRepository = FakeBarcodeRepository(
+                result = BarcodeLookupResult.Found(
+                    productName = "Snack Pack",
+                    nutritionPer100g = BarcodeNutritionPer100g(
+                        calories = 120f,
+                        proteinGrams = 2f,
+                        carbsGrams = 20f,
+                        fatGrams = 4f
+                    ),
+                    servingSize = "2 x 25 g"
+                )
+            )
+        )
+
+        viewModel.onBarcodeDetected("123")
+        advanceUntilIdle()
+
+        assertEquals("50", viewModel.barcodeUiState.value.servingGrams)
+    }
+
+    @Test
+    fun `barcode serving prefill handles multiplication symbol`() = runTest {
+        val viewModel = createViewModel(
+            barcodeRepository = FakeBarcodeRepository(
+                result = BarcodeLookupResult.Found(
+                    productName = "Snack Pack",
+                    nutritionPer100g = BarcodeNutritionPer100g(
+                        calories = 120f,
+                        proteinGrams = 2f,
+                        carbsGrams = 20f,
+                        fatGrams = 4f
+                    ),
+                    servingSize = "2×25g"
+                )
+            )
+        )
+
+        viewModel.onBarcodeDetected("123")
+        advanceUntilIdle()
+
+        assertEquals("50", viewModel.barcodeUiState.value.servingGrams)
+    }
+
+    @Test
+    fun `barcode serving scales float per 100g calories before rounding`() = runTest {
+        val viewModel = createViewModel(
+            barcodeRepository = FakeBarcodeRepository(
+                result = BarcodeLookupResult.Found(
+                    productName = "Half Portion",
+                    nutritionPer100g = BarcodeNutritionPer100g(
+                        calories = 92.5f,
+                        proteinGrams = 1f,
+                        carbsGrams = 1f,
+                        fatGrams = 1f
+                    ),
+                    servingSize = "50g"
+                )
+            )
+        )
+
+        viewModel.onBarcodeDetected("123")
+        advanceUntilIdle()
+        viewModel.onServingConfirmed()
+        advanceUntilIdle()
+
+        val result = viewModel.uiState.value as AddFoodUiState.Result
+        assertEquals(46, result.totalCalories)
+    }
+
+    @Test
     fun `editing favorite updates favorite without logging meal for every meal type`() = runTest {
         MealType.entries.forEach { mealType ->
             val existingFavorite = FavoriteMeal(
@@ -195,7 +269,22 @@ class AddFoodViewModelTest {
                 totalCarbs = 17f,
                 totalFat = 12f,
                 items = listOf(
-                    NutritionItem("chicken", "200g chicken", 330, 44f, 0f, 12f),
+                    NutritionItem(
+                        name = "chicken",
+                        amount = "200g chicken",
+                        calories = 330,
+                        proteinGrams = 44f,
+                        carbsGrams = 0f,
+                        fatGrams = 12f,
+                        grams = 200f,
+                        per100g = NutritionPer100g(
+                            calories = 165f,
+                            proteinGrams = 22f,
+                            carbsGrams = 0f,
+                            fatGrams = 6f
+                        ),
+                        caloriesRecomputed = true
+                    ),
                     NutritionItem("potatoes", "100g potatoes", 36, 2f, 17f, 0f)
                 ),
                 mealType = mealType
@@ -217,7 +306,81 @@ class AddFoodViewModelTest {
             assertEquals(7, updatedFavorite.id)
             assertEquals("Chicken, potatoes", updatedFavorite.name)
             assertEquals(mealType, updatedFavorite.mealType)
+            assertEquals(200f, updatedFavorite.items.first().grams!!, 0.001f)
+            assertEquals(165f, updatedFavorite.items.first().per100g!!.calories, 0.001f)
+            assertEquals(true, updatedFavorite.items.first().caloriesRecomputed)
         }
+    }
+
+    @Test
+    fun `reanalyzing edited favorite updates favorite without logging meal`() = runTest {
+        val existingFavorite = FavoriteMeal(
+            id = 7,
+            name = "Chicken",
+            description = "200g chicken",
+            totalCalories = 330,
+            totalProtein = 44f,
+            totalCarbs = 0f,
+            totalFat = 12f,
+            items = listOf(
+                NutritionItem("chicken", "200g", 330, 44f, 0f, 12f)
+            ),
+            mealType = MealType.BREAKFAST
+        )
+        val foodRepository = FakeFoodRepository()
+        val favoriteRepository = FakeFavoriteRepository(existingMeal = existingFavorite)
+        val viewModel = createViewModel(
+            aiRepository = FakeAiRepository(
+                result = NutritionInfo(
+                    calories = 248,
+                    proteinGrams = 31f,
+                    carbsGrams = 0f,
+                    fatGrams = 8f,
+                    items = listOf(
+                        NutritionItem("turkey", "150g", 248, 31f, 0f, 8f)
+                    )
+                )
+            ),
+            foodRepository = foodRepository,
+            favoriteRepository = favoriteRepository
+        )
+
+        viewModel.updateRouteArgs(mealType = "BREAKFAST", date = "2026-04-09", favoriteId = 7)
+        advanceUntilIdle()
+        viewModel.updateDescription(TextFieldValue("150g turkey"))
+        viewModel.reAnalyze()
+        advanceUntilIdle()
+        viewModel.logFood()
+        advanceUntilIdle()
+
+        assertTrue(foodRepository.insertedEntries.isEmpty())
+        val updatedFavorite = favoriteRepository.updatedMeals.single()
+        assertEquals(7, updatedFavorite.id)
+        assertEquals("Chicken", updatedFavorite.name)
+        assertEquals("150g turkey", updatedFavorite.description)
+    }
+
+    @Test
+    fun `ai result with empty items shows error instead of saveable result`() = runTest {
+        val viewModel = createViewModel(
+            aiRepository = FakeAiRepository(
+                result = NutritionInfo(
+                    calories = 500,
+                    proteinGrams = 20f,
+                    carbsGrams = 50f,
+                    fatGrams = 10f,
+                    items = emptyList()
+                )
+            )
+        )
+
+        viewModel.updateDescription(TextFieldValue("mystery meal"))
+        viewModel.analyzeFood()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertTrue(state is AddFoodUiState.Error)
+        assertEquals("AI couldn't identify any food items", (state as AddFoodUiState.Error).message)
     }
 
     @Test

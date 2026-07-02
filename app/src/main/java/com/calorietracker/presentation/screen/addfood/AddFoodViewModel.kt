@@ -13,7 +13,9 @@ import com.calorietracker.domain.model.FoodSource
 import com.calorietracker.domain.model.MealType
 import com.calorietracker.domain.model.NutritionInfo
 import com.calorietracker.domain.model.NutritionItem
+import com.calorietracker.domain.model.NutritionPer100g
 import com.calorietracker.domain.repository.AiRepository
+import com.calorietracker.domain.repository.BarcodeNutritionPer100g
 import com.calorietracker.domain.repository.BarcodeLookupResult
 import com.calorietracker.domain.repository.BarcodeRepository
 import com.calorietracker.domain.repository.FavoriteRepository
@@ -83,8 +85,8 @@ class AddFoodViewModel @Inject constructor(
         val showDialog = savedStateHandle.get<Boolean>("bc_show_dialog") ?: false
         if (!showDialog) return BarcodeUiState()
         val nutrition = if (savedStateHandle.get<Boolean>("bc_has_nutrition") == true) {
-            NutritionInfo(
-                calories = savedStateHandle.get<Int>("bc_cal") ?: 0,
+            BarcodeNutritionPer100g(
+                calories = savedStateHandle.get<Float>("bc_cal") ?: 0f,
                 proteinGrams = savedStateHandle.get<Float>("bc_protein") ?: 0f,
                 carbsGrams = savedStateHandle.get<Float>("bc_carbs") ?: 0f,
                 fatGrams = savedStateHandle.get<Float>("bc_fat") ?: 0f
@@ -140,16 +142,7 @@ class AddFoodViewModel @Inject constructor(
         viewModelScope.launch {
             val favorite = favoriteRepository.getById(favoriteId) ?: return@launch
             val items = if (favorite.items.isNotEmpty()) {
-                favorite.items.map { item ->
-                    FoodItemResult(
-                        name = item.name,
-                        amount = item.amount,
-                        calories = item.calories,
-                        proteinGrams = item.proteinGrams,
-                        carbsGrams = item.carbsGrams,
-                        fatGrams = item.fatGrams
-                    )
-                }
+                favorite.items.map { item -> item.toFoodItemResult() }
             } else {
                 listOf(
                     FoodItemResult(
@@ -260,10 +253,14 @@ class AddFoodViewModel @Inject constructor(
                 val parsedMealType = MealType.valueOf(routeArgs.value.mealType)
                 val existingFavorite = favoriteRepository
                     .findByDescriptionAndMealType(description, parsedMealType)
+                val editingFavorite = routeArgs.value.favoriteId != null
+                val routeFavorite = routeArgs.value.favoriteId?.let { favoriteRepository.getById(it) }
                 _uiState.value = cachedResult!!.copy(
                     isCached = true,
-                    isAlreadyFavorite = existingFavorite != null,
-                    favoriteName = existingFavorite?.name ?: cachedResult!!.favoriteName
+                    isAlreadyFavorite = editingFavorite || existingFavorite != null,
+                    favoriteName = existingFavorite?.name
+                        ?: routeFavorite?.name
+                        ?: cachedResult!!.favoriteName
                 )
             }
             return
@@ -273,19 +270,16 @@ class AddFoodViewModel @Inject constructor(
             _uiState.value = AddFoodUiState.Analyzing
             aiRepository.analyzeFood(description)
                 .onSuccess { result ->
-                    val items = result.items.map { item ->
-                        FoodItemResult(
-                            name = item.name,
-                            amount = item.amount,
-                            calories = item.calories,
-                            proteinGrams = item.proteinGrams,
-                            carbsGrams = item.carbsGrams,
-                            fatGrams = item.fatGrams
-                        )
+                    if (result.items.isEmpty()) {
+                        _uiState.value = AddFoodUiState.Error("AI couldn't identify any food items")
+                        return@onSuccess
                     }
+                    val items = result.items.map { item -> item.toFoodItemResult() }
                     val parsedMealType = MealType.valueOf(routeArgs.value.mealType)
                     val existingFavorite = favoriteRepository
                         .findByDescriptionAndMealType(description, parsedMealType)
+                    val editingFavorite = routeArgs.value.favoriteId != null
+                    val routeFavorite = routeArgs.value.favoriteId?.let { favoriteRepository.getById(it) }
                     val resultState = AddFoodUiState.Result(
                         description = description,
                         totalCalories = result.calories,
@@ -294,8 +288,8 @@ class AddFoodViewModel @Inject constructor(
                         totalFat = result.fatGrams,
                         items = items,
                         isCached = false,
-                        favoriteName = existingFavorite?.name.orEmpty(),
-                        isAlreadyFavorite = existingFavorite != null,
+                        favoriteName = existingFavorite?.name ?: routeFavorite?.name.orEmpty(),
+                        isAlreadyFavorite = editingFavorite || existingFavorite != null,
                         source = FoodSource.AI
                     )
                     lastAnalyzedDescription = description
@@ -345,11 +339,14 @@ class AddFoodViewModel @Inject constructor(
                     calories = item.calories,
                     proteinGrams = item.proteinGrams,
                     carbsGrams = item.carbsGrams,
-                    fatGrams = item.fatGrams
+                    fatGrams = item.fatGrams,
+                    grams = item.grams,
+                    per100g = item.per100g,
+                    caloriesRecomputed = item.caloriesRecomputed
                 )
             }
 
-            if (updateFavorite && args.favoriteId != null && state.isAlreadyFavorite) {
+            if (updateFavorite && args.favoriteId != null) {
                 val existing = favoriteRepository.getById(args.favoriteId)
                 if (existing != null) {
                     favoriteRepository.update(
@@ -673,7 +670,14 @@ class AddFoodViewModel @Inject constructor(
                         calories = (nutritionPer100g.calories * multiplier).roundToInt(),
                         proteinGrams = nutritionPer100g.proteinGrams * multiplier,
                         carbsGrams = nutritionPer100g.carbsGrams * multiplier,
-                        fatGrams = nutritionPer100g.fatGrams * multiplier
+                        fatGrams = nutritionPer100g.fatGrams * multiplier,
+                        grams = grams,
+                        per100g = NutritionPer100g(
+                            calories = nutritionPer100g.calories,
+                            proteinGrams = nutritionPer100g.proteinGrams,
+                            carbsGrams = nutritionPer100g.carbsGrams,
+                            fatGrams = nutritionPer100g.fatGrams
+                        )
                     )
                 ),
                 favoriteName = existingFavorite?.name
@@ -701,6 +705,20 @@ private data class AddFoodRouteArgs(
     val date: String,
     val favoriteId: Long? = null
 )
+
+private fun NutritionItem.toFoodItemResult(): FoodItemResult {
+    return FoodItemResult(
+        name = name,
+        amount = amount,
+        calories = calories,
+        proteinGrams = proteinGrams,
+        carbsGrams = carbsGrams,
+        fatGrams = fatGrams,
+        grams = grams,
+        per100g = per100g,
+        caloriesRecomputed = caloriesRecomputed
+    )
+}
 
 private fun AddFoodUiState.Result.defaultFavoriteName(): String {
     val itemNames = items.mapNotNull { it.name.trim().takeIf(String::isNotBlank) }
@@ -781,6 +799,15 @@ private fun levenshteinDistance(left: String, right: String): Int {
 
 private fun parseServingAmount(servingSize: String?): Int? {
     if (servingSize.isNullOrBlank()) return null
+
+    Regex(
+        """(\d+(?:[.,]\d+)?)\s*(?:x|×)\s*(\d+(?:[.,]\d+)?)\s*(?:g|ml)\b""",
+        RegexOption.IGNORE_CASE
+    ).find(servingSize)?.let { match ->
+        val count = match.groupValues[1].replace(',', '.').toFloatOrNull()
+        val amount = match.groupValues[2].replace(',', '.').toFloatOrNull()
+        if (count != null && amount != null) return (count * amount).roundToInt()
+    }
 
     return Regex("""(\d+(?:[.,]\d+)?)\s*(?:g|ml)\b""", RegexOption.IGNORE_CASE)
         .findAll(servingSize)

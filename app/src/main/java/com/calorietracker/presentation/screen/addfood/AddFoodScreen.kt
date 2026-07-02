@@ -123,6 +123,7 @@ import com.calorietracker.presentation.theme.motionTween
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -864,6 +865,21 @@ private fun FoodItemCard(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    if (item.caloriesRecomputed) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.extendedColors.warning.copy(alpha = 0.14f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "Kcal checked",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.extendedColors.warning
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = "${item.calories} kcal",
@@ -916,6 +932,7 @@ private fun EditItemSheet(
     var protein by remember(item) { mutableStateOf(item.proteinGrams.toString()) }
     var carbs by remember(item) { mutableStateOf(item.carbsGrams.toString()) }
     var fat by remember(item) { mutableStateOf(item.fatGrams.toString()) }
+    var grams by remember(item) { mutableStateOf(item.grams?.toDisplayString().orEmpty()) }
     val calorieError = ManualEntryValidator.calorieError(calories)
     val proteinError = ManualEntryValidator.macroError(protein)
     val carbsError = ManualEntryValidator.macroError(carbs)
@@ -956,6 +973,29 @@ private fun EditItemSheet(
                     .padding(horizontal = 24.dp)
             )
             Spacer(modifier = Modifier.height(10.dp))
+
+            if (item.per100g != null && item.grams != null) {
+                CompactTextField(
+                    value = grams,
+                    onValueChange = { value ->
+                        grams = value.filter { it.isDigit() || it == '.' || it == ',' }
+                        val parsed = grams.replace(',', '.').toFloatOrNull()
+                        if (parsed != null && parsed > 0f) {
+                            val multiplier = parsed / 100f
+                            calories = (item.per100g.calories * multiplier).roundToInt().toString()
+                            protein = (item.per100g.proteinGrams * multiplier).toDisplayString()
+                            carbs = (item.per100g.carbsGrams * multiplier).toDisplayString()
+                            fat = (item.per100g.fatGrams * multiplier).toDisplayString()
+                        }
+                    },
+                    label = "Portion (g)",
+                    keyboardType = KeyboardType.Decimal,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             CompactTextField(
                 value = calories,
@@ -1006,7 +1046,8 @@ private fun EditItemSheet(
                         calories = calories,
                         protein = protein,
                         carbs = carbs,
-                        fat = fat
+                        fat = fat,
+                        grams = grams
                     )
                     coroutineScope.launch {
                         sheetState.hide()
@@ -1065,15 +1106,25 @@ private fun FoodItemResult.updatedWith(
     calories: String,
     protein: String,
     carbs: String,
-    fat: String
+    fat: String,
+    grams: String
 ): FoodItemResult {
     return copy(
         name = name,
         calories = calories.toIntOrNull() ?: this.calories,
         proteinGrams = protein.replace(',', '.').toFloatOrNull() ?: proteinGrams,
         carbsGrams = carbs.replace(',', '.').toFloatOrNull() ?: carbsGrams,
-        fatGrams = fat.replace(',', '.').toFloatOrNull() ?: fatGrams
+        fatGrams = fat.replace(',', '.').toFloatOrNull() ?: fatGrams,
+        grams = grams.replace(',', '.').toFloatOrNull() ?: this.grams
     )
+}
+
+private fun Float.toDisplayString(): String {
+    return if (this % 1f == 0f) {
+        toInt().toString()
+    } else {
+        "%.1f".format(java.util.Locale.US, this)
+    }
 }
 
 @Composable

@@ -1,14 +1,13 @@
 package com.calorietracker.data.repository
 
 import com.calorietracker.data.remote.barcode.OpenFoodFactsApiService
-import com.calorietracker.domain.model.NutritionInfo
+import com.calorietracker.domain.repository.BarcodeNutritionPer100g
 import com.calorietracker.domain.repository.BarcodeLookupResult
 import com.calorietracker.domain.repository.BarcodeRepository
 import retrofit2.HttpException
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.roundToInt
 
 @Singleton
 class OpenFoodFactsBarcodeRepository @Inject constructor(
@@ -44,8 +43,8 @@ class OpenFoodFactsBarcodeRepository @Inject constructor(
                 } else {
                     BarcodeLookupResult.Found(
                         productName = product.name.ifBlank { UNKNOWN_PRODUCT_NAME },
-                        nutritionPer100g = NutritionInfo(
-                            calories = (caloriesPer100g ?: 0f).roundToInt(),
+                        nutritionPer100g = BarcodeNutritionPer100g(
+                            calories = caloriesPer100g ?: 0f,
                             proteinGrams = nutriments.proteinPer100g ?: 0f,
                             carbsGrams = nutriments.carbsPer100g ?: 0f,
                             fatGrams = nutriments.fatPer100g ?: 0f

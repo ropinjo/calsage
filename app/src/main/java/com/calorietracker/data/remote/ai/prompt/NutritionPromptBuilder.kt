@@ -22,15 +22,16 @@ object NutritionPromptBuilder {
         "- Use USDA / standard nutritional databases as reference.\n" +
         "- Return integer calories, float grams rounded to 1 decimal.\n" +
         "- If the input is not food, set the \"error\" field to explain why and use 0 for all numeric fields.\n" +
-        "- Each item in \"items\" must have: name, amount, calories, protein_g, carbs_g, fat_g.\n" +
-        "- The top-level calories/protein_g/carbs_g/fat_g must equal the sum of all items.\n" +
+        "- Each item in \"items\" must have: name, amount, calories, protein_g, carbs_g, fat_g, grams, per_100g.\n" +
+        "- Include top-level calories/protein_g/carbs_g/fat_g, but the app will recompute totals from items.\n" +
         "\n" +
         "Estimation method (apply to every item):\n" +
-        "- First recall the food's standard density per 100 g (per 100 ml for liquids) as eaten, using cooked values for cooked food: calories, protein, carbs and fat.\n" +
+        "- First recall the food's standard density per 100 g (per 100 ml for liquids) as eaten, using cooked values for cooked food: calories, protein, carbs and fat. Put these unscaled values in per_100g.\n" +
         "- The user weighs their food. When a weight or measure is given, use that exact amount — never round it, scale it, or second-guess it.\n" +
         "- When no quantity is given, assume a typical adult serving.\n" +
-        "- Compute each value as density_per_100 * amount / 100.\n" +
-        "- Check that each item is internally consistent: calories should be close to 4*protein_g + 4*carbs_g + 9*fat_g. If it is not, recheck the density before answering.\n" +
+        "- Put the gram or ml amount used for the portion in grams. For liquids, use ml as the same numeric portion basis.\n" +
+        "- Compute item calories/protein_g/carbs_g/fat_g from per_100g and grams, rounded as requested, but do not adjust per_100g to make the final multiplication fit.\n" +
+        "- Check that each item's per_100g is internally consistent: calories should be close to 4*protein_g + 4*carbs_g + 9*fat_g. If it is not, recheck the density before answering.\n" +
         "- When a food's species, cut or preparation is not specified, assume the most common everyday version (for example \"breast\" -> chicken breast, \"soup\" -> a broth-based soup).\n" +
         "\n" +
         "Reference densities per 100 g cooked / as eaten (per 100 ml for liquids) as calories, protein g, carbs g, fat g. Interpolate for similar foods; for anything not listed use standard nutritional databases:\n" +
@@ -121,6 +122,23 @@ object NutritionPromptBuilder {
     fun getNutritionJsonSchema(): JsonObject = buildNutritionJsonSchema()
 
     private fun buildNutritionJsonSchema(): JsonObject {
+        val per100gSchema = buildJsonObject {
+            put("type", "object")
+            put("properties", buildJsonObject {
+                put("calories", buildJsonObject { put("type", "number") })
+                put("protein_g", buildJsonObject { put("type", "number") })
+                put("carbs_g", buildJsonObject { put("type", "number") })
+                put("fat_g", buildJsonObject { put("type", "number") })
+            })
+            put("required", buildJsonArray {
+                add(JsonPrimitive("calories"))
+                add(JsonPrimitive("protein_g"))
+                add(JsonPrimitive("carbs_g"))
+                add(JsonPrimitive("fat_g"))
+            })
+            put("additionalProperties", JsonPrimitive(false))
+        }
+
         val nutritionItemSchema = buildJsonObject {
             put("type", "object")
             put("properties", buildJsonObject {
@@ -130,6 +148,8 @@ object NutritionPromptBuilder {
                 put("protein_g", buildJsonObject { put("type", "number") })
                 put("carbs_g", buildJsonObject { put("type", "number") })
                 put("fat_g", buildJsonObject { put("type", "number") })
+                put("grams", buildJsonObject { put("type", "number") })
+                put("per_100g", per100gSchema)
             })
             put("required", buildJsonArray {
                 add(JsonPrimitive("name"))
@@ -138,6 +158,8 @@ object NutritionPromptBuilder {
                 add(JsonPrimitive("protein_g"))
                 add(JsonPrimitive("carbs_g"))
                 add(JsonPrimitive("fat_g"))
+                add(JsonPrimitive("grams"))
+                add(JsonPrimitive("per_100g"))
             })
             put("additionalProperties", JsonPrimitive(false))
         }

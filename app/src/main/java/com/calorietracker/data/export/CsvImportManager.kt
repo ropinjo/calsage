@@ -72,19 +72,20 @@ class CsvImportManager @Inject constructor(
                 var entry = zis.nextEntry
                 while (entry != null) {
                     val name = entry.name.substringAfterLast('/')
-                    val bytes = zis.readAllAvailable()
-                    val text = String(bytes.toByteArray(), Charsets.UTF_8)
                     when (name) {
                         "food_entries.csv" -> {
                             sawKnownEntry = true
+                            val text = zis.readTextEntry()
                             foodEntries += parseFoodEntries(text)
                         }
                         "weight_entries.csv" -> {
                             sawKnownEntry = true
+                            val text = zis.readTextEntry()
                             weightEntries += parseWeightEntries(text)
                         }
                         "favorites.csv" -> {
                             sawKnownEntry = true
+                            val text = zis.readTextEntry()
                             favorites += parseFavorites(text)
                         }
                         "daily_summaries.csv" -> sawKnownEntry = true
@@ -140,7 +141,7 @@ class CsvImportManager @Inject constructor(
         foodEntries: List<FoodEntryEntity>,
         weightEntries: List<WeightEntryEntity>,
         favorites: List<FavoriteMealEntity>
-    ): ImportResult {
+    ): ImportResult = database.withTransaction {
         val existingFoodKeys = foodEntryDao.getAllEntriesOnce().mapTo(mutableSetOf()) { foodKey(it) }
         var foodInserted = 0
         var skipped = 0
@@ -178,7 +179,7 @@ class CsvImportManager @Inject constructor(
             }
         }
 
-        return ImportResult(
+        ImportResult(
             foodEntries = foodInserted,
             weightEntries = weightInserted,
             favorites = favInserted,
@@ -207,7 +208,7 @@ class CsvImportManager @Inject constructor(
                     // parsing can trust everything stored in the database.
                     date = LocalDate.parse(row[1]).toString(),
                     mealType = parseMealType(row[2]),
-                    description = row[3],
+                    description = row[3].stripCsvFormulaGuard(),
                     calories = row[4].toInt(),
                     proteinGrams = row[5].toFloat(),
                     carbsGrams = row[6].toFloat(),
@@ -227,7 +228,7 @@ class CsvImportManager @Inject constructor(
                     id = 0,
                     date = LocalDate.parse(row[1]).toString(),
                     weightKg = row[2].toFloat(),
-                    note = row[3].ifBlank { null },
+                    note = row[3].stripCsvFormulaGuard().ifBlank { null },
                     timestamp = row[4].toLong()
                 )
             }.getOrNull()
@@ -240,8 +241,8 @@ class CsvImportManager @Inject constructor(
             runCatching {
                 FavoriteMealEntity(
                     id = 0,
-                    name = row[1],
-                    description = row[2],
+                    name = row[1].stripCsvFormulaGuard(),
+                    description = row[2].stripCsvFormulaGuard(),
                     totalCalories = row[3].toInt(),
                     totalProtein = row[4].toFloat(),
                     totalCarbs = row[5].toFloat(),
@@ -307,14 +308,25 @@ class CsvImportManager @Inject constructor(
         return rows
     }
 
+    private fun ZipInputStream.readTextEntry(): String {
+        return String(readAllAvailable().toByteArray(), Charsets.UTF_8)
+    }
+
     private fun ZipInputStream.readAllAvailable(): ByteArrayOutputStream {
         val out = ByteArrayOutputStream()
         val buffer = ByteArray(8 * 1024)
         while (true) {
             val read = read(buffer)
             if (read <= 0) break
+            if (out.size() + read > MAX_ENTRY_BYTES) {
+                throw IllegalArgumentException("Import file contains an entry over 20 MB")
+            }
             out.write(buffer, 0, read)
         }
         return out
+    }
+
+    private companion object {
+        const val MAX_ENTRY_BYTES = 20 * 1024 * 1024
     }
 }
