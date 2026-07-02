@@ -56,4 +56,5 @@ Please write a high-quality, general-purpose solution using the standard tools a
 
 - When the user says `build the apk`, build the debug APK.
 - Copy the resulting APK into `/mnt/hgfs/apks/` using the next sequential filename in this format: `calsage-vN.0-debug.apk`.
+- When the user asks for a release version, build the signed release APK and copy it into `/mnt/hgfs/apks/` using the release version filename, for example `calsage-v1.6.apk`.
 - Preserve the existing version history; do not overwrite older versions unless the user explicitly asks for that.
